@@ -29,8 +29,10 @@ function DropZone({
       }}
       onDragLeave={() => setOver(false)}
       onDrop={pick}
-      className={`flex min-h-44 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-6 text-center transition-colors ${
-        over ? "border-primary bg-indigo-50" : "border-border bg-card hover:bg-muted/40"
+      className={`flex min-h-44 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-6 text-center transition-all ${
+        over
+          ? "scale-[1.01] border-fuchsia-400 bg-fuchsia-50"
+          : "border-indigo-200 bg-gradient-to-br from-indigo-50/60 to-fuchsia-50/60 hover:border-fuchsia-300 hover:shadow-md"
       } ${disabled ? "pointer-events-none opacity-60" : ""}`}
     >
       <input
@@ -40,7 +42,13 @@ function DropZone({
         disabled={disabled}
         onChange={(e) => onFile(e.target.files?.[0] ?? null)}
       />
-      {file ? <IconFileText className="size-8 text-emerald-600" /> : <IconUpload className="size-8 text-primary" />}
+      {file ? (
+        <IconFileText className="size-10 text-emerald-500" />
+      ) : (
+        <span className="flex size-14 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 shadow-md">
+          <IconUpload className="size-7 text-white" />
+        </span>
+      )}
       <span className="font-medium text-foreground">{label}</span>
       <span className="text-sm text-muted-foreground">{file ? file.name : "Drop a .doc or .docx here, or click to choose"}</span>
     </label>
@@ -84,7 +92,7 @@ export function UploadStep({
           value={template}
           onChange={(e) => setTemplate(e.target.value as Template | "")}
           disabled={!isAuthor || busy}
-          className="rounded-lg border border-border bg-card px-3 py-2 font-normal"
+          className="rounded-lg border border-indigo-200 bg-white px-3 py-2 font-normal shadow-sm focus:ring-2 focus:ring-fuchsia-300 outline-none"
         >
           <option value="">Choose a template</option>
           <option value="integrated">Integrated (Theory + Lab)</option>
@@ -95,6 +103,7 @@ export function UploadStep({
       {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
       <div>
         <Button
+          className="bg-gradient-to-r from-indigo-500 to-fuchsia-500 text-white shadow-md hover:from-indigo-600 hover:to-fuchsia-600 disabled:opacity-50"
           onClick={() => spec && template && onGenerate(spec, blueprint, template)}
           disabled={!isAuthor || !spec || !template || busy}
         >
