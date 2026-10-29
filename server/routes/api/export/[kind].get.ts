@@ -1,7 +1,8 @@
 import { defineEventHandler, getRouterParam, setResponseStatus } from "h3";
 import { runChecks } from "../../../lib/syllabus/engine";
 import { renderPdf } from "../../../lib/syllabus/pdf";
-import { buildJson, renderHtml } from "../../../lib/syllabus/render";
+import { renderHtml } from "../../../lib/syllabus/render";
+import { buildSpecForge } from "../../../lib/syllabus/specforge";
 import { HttpError, loadDoc } from "../../../lib/syllabus/store";
 
 export default defineEventHandler(async (event) => {
@@ -28,7 +29,7 @@ export default defineEventHandler(async (event) => {
       });
     }
     if (kind === "json") {
-      return new Response(JSON.stringify(buildJson(doc, runChecks(doc)), null, 2), {
+      return new Response(JSON.stringify(buildSpecForge(doc, runChecks(doc)), null, 2), {
         headers: {
           "content-type": "application/json",
           "content-disposition": `attachment; filename="specforge_output.json"`,
