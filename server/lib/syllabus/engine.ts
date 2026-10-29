@@ -309,12 +309,10 @@ function findLabelMismatches(lines: string[], units: Unit[]): NonNullable<ParseM
     if (!labelStems.length) continue;
     const shared = labelStems.filter((word) => ownStems.has(word));
     if (shared.length) {
+      // A label made only of a subset of the unit's own words has dropped a word from the title.
       const subset = labelStems.every((word) => ownStems.has(word));
       const missing = [...ownStems].filter((word) => !labelStems.includes(word));
-      const overlap = shared.length / labelStems.length;
-      // A label built only from the unit's own words that drops one, or that shares almost
-      // nothing but a single topic word, no longer names the unit.
-      if ((subset && missing.length) || (!subset && overlap < 0.5)) {
+      if (subset && missing.length) {
         found.push({ section: 4, refs: [`Unit-${current}`], found: label[1]!.trim(), expected: own.title });
       }
       continue;
