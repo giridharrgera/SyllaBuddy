@@ -116,6 +116,9 @@ importers:
       ai-sdk-ollama:
         specifier: ^3.8.8
         version: 3.8.8(ai@6.0.258(zod@4.6.5))(zod@4.6.5)
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
       dotenv:
         specifier: ^17.2.1
         version: 17.4.2
