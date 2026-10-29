@@ -76,7 +76,7 @@ const TYPOS: Record<string, string> = {
 
 /** Broken references the word dictionary cannot catch: a domain split across a space or a dropped letter. */
 const BROKEN_REFERENCES: { re: RegExp; right: string }[] = [
-  { re: /quantamagazine\.r\s*g/gi, right: "quantamagazine.org" },
+  { re: /quantamagazine\.r\s*g\s*\/\s*/gi, right: "quantamagazine.org/" },
 ];
 
 export const DEFAULT_ANNEXURE: Record<MapColumn, string> = Object.fromEntries(
@@ -145,7 +145,11 @@ export function buildMap(spec: Spec): SyllabusDoc["map"] {
       if (!allowedColumn(col, co, spec)) continue;
       const keyword = co.text.match(PO_KEYWORDS[col]);
       if (!keyword) continue;
-      const value = maxLevelFor(co.bloom);
+      // "problem" alone names a topic, not problem analysis, so PO-2 needs an analysis verb for a strong rating.
+      const value =
+        col === "PO-2" && !/analy|analys|identif|formulat|compar|evaluat|interpret|examin|distinguish/i.test(co.text)
+          ? (Math.min(2, maxLevelFor(co.bloom)) as MapCell["value"])
+          : maxLevelFor(co.bloom);
       const evidence = keyword[0].toLowerCase() === verb ? `the verb "${verb}"` : `"${keyword[0]}"`;
       row[col] = {
         value,
@@ -268,6 +272,10 @@ function keywordsOf(text: string): string[] {
 const LABEL_UNIT = /^(?:unit|module)\s*[-–:.]?\s*(\d+)/i;
 const LAB_LABEL = /\blab\s+exercises?\s+on\s+(.+?)[.:]?$/i;
 
+function stem(word: string): string {
+  return word.replace(/(?:es|s)$/, "");
+}
+
 function findLabelMismatches(lines: string[], units: Unit[]): NonNullable<ParseMeta["labelMismatches"]> {
   const found: NonNullable<ParseMeta["labelMismatches"]> = [];
   const heading = lines.find((line) => /Achieving\s+Cos\b/.test(line));
@@ -283,11 +291,21 @@ function findLabelMismatches(lines: string[], units: Unit[]): NonNullable<ParseM
     if (!label || !current) continue;
     const own = byNo.get(current);
     if (!own) continue;
-    const ownWords = new Set(keywordsOf(own.title));
-    const labelWords = keywordsOf(label[1] ?? "");
-    if (!labelWords.length || labelWords.some((word) => ownWords.has(word))) continue;
+    const ownStems = new Set(keywordsOf(own.title).map(stem));
+    const labelStems = keywordsOf(label[1] ?? "").map(stem);
+    if (!labelStems.length) continue;
+    const shared = labelStems.filter((word) => ownStems.has(word));
+    if (shared.length) {
+      // A label made only of a subset of the unit's own words has dropped a word from the title.
+      const subset = labelStems.every((word) => ownStems.has(word));
+      const missing = [...ownStems].filter((word) => !labelStems.includes(word));
+      if (subset && missing.length) {
+        found.push({ section: 4, refs: [`Unit-${current}`], found: label[1]!.trim(), expected: own.title });
+      }
+      continue;
+    }
     const other = units.find(
-      (unit) => unit.no !== current && keywordsOf(unit.title).some((word) => labelWords.includes(word)),
+      (unit) => unit.no !== current && keywordsOf(unit.title).some((word) => labelStems.includes(stem(word))),
     );
     if (!other) continue;
     found.push({ section: 4, refs: [`Unit-${current}`], found: label[1]!.trim(), expected: own.title });
@@ -399,6 +417,14 @@ export function buildSpec(
   };
   const coCoverage = normalizeCoverage(assessmentGrid);
 
+  const labels = findLabelMismatches(specLines, units);
+  for (const label of labels) {
+    const ref = label.refs[0];
+    if (label.section !== 4 || !ref) continue;
+    const unit = units.find((item) => item.no === ref.replace("Unit-", ""));
+    if (unit) unit.lab = `Lab Exercises on ${unit.title}.`;
+  }
+
   const spec: Spec = {
     inputId: extractInputId(specText) || fallbackInputId,
     title,
@@ -434,7 +460,6 @@ export function buildSpec(
     summaryCoversUnits: summaryUnits.covered,
     ...(typos.length ? { typos } : {}),
   };
-  const labels = findLabelMismatches(specLines, spec.units);
   if (labels.length) parseMeta.labelMismatches = labels;
 
   return { spec, changes, parseMeta, mapGrid };

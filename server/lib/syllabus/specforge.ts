@@ -34,7 +34,7 @@ export interface SpecforgeDefect {
   code: DefectCode;
   location: {
     source: "spec" | "blueprint" | "template";
-    section?: number;
+    section?: number | null;
     refs?: string[];
   };
   description: string;
@@ -173,9 +173,7 @@ function buildDefects(doc: SyllabusDoc, spec: Spec, cos: CourseOutcome[], covera
     section?: number,
     refs?: string[],
   ) => {
-    const location: SpecforgeDefect["location"] = { source };
-    if (section !== undefined) location.section = section;
-    if (refs?.length) location.refs = refs;
+    const location: SpecforgeDefect["location"] = { source, section: section ?? null, refs: refs ?? [] };
     defects.push({ code, location, description, fix });
   };
   const at = (code: DefectCode, description: string, fix: string, section?: number, refs?: string[]) =>
@@ -183,22 +181,23 @@ function buildDefects(doc: SyllabusDoc, spec: Spec, cos: CourseOutcome[], covera
 
   const detected = detectTemplate(spec.credits, spec.courseType, spec.units);
   if (detected !== spec.template) {
-    at(
+    add(
       "WRONG_TEMPLATE",
+      "template",
       `The ${spec.template} template was used, but credits ${spec.credits.L}:${spec.credits.T}:${spec.credits.P} and course type "${spec.courseType}" call for ${detected}.`,
       `Use the ${detected} template.`,
     );
   }
 
   if (SAMPLE_TEXT.test(spec.summary ?? "")) {
-    at("PLACEHOLDER_TEXT", "The course summary still contains sample or placeholder text.", "Replace it with a summary of this course.", SECTION.summary);
+    add("PLACEHOLDER_TEXT", "template", "The course summary still contains sample or placeholder text.", "Replace it with a summary of this course.", SECTION.summary);
   }
   if (SAMPLE_TEXT.test(spec.resources ?? "")) {
-    at("PLACEHOLDER_TEXT", "The resources section still contains sample or placeholder text.", "List the actual textbooks and references.", SECTION.resources);
+    add("PLACEHOLDER_TEXT", "template", "The resources section still contains sample or placeholder text.", "List the actual textbooks and references.", SECTION.resources);
   }
   for (const co of cos) {
     if (SAMPLE_TEXT.test(co.text)) {
-      at("PLACEHOLDER_TEXT", `${coId(co.id)} still contains placeholder text.`, "Write it as one measurable outcome.", SECTION.cos, [coId(co.id)]);
+      add("PLACEHOLDER_TEXT", "template", `${coId(co.id)} still contains placeholder text.`, "Write it as one measurable outcome.", SECTION.cos, [coId(co.id)]);
     }
     if (/^CO\s*-?\s*\d+\s*[:\-–]/i.test(co.text)) {
       at("LABEL_OR_TITLE_MISMATCH", `${coId(co.id)} repeats its label inside the statement.`, "Remove the CO id from the statement text.", SECTION.cos, [coId(co.id)]);
@@ -279,7 +278,7 @@ function buildDefects(doc: SyllabusDoc, spec: Spec, cos: CourseOutcome[], covera
     }
 
     for (const typo of meta.typos ?? []) {
-      at("TYPO_OR_FORMAT", `"${typo.wrong}" should read "${typo.right}" in Section ${typo.section}.`, `Correct it to "${typo.right}".`, typo.section);
+      at("TYPO_OR_FORMAT", `"${typo.wrong}" should read "${typo.right}" in Section ${typo.section}.`, `Correct it to "${typo.right}".`, typo.section, [typo.wrong]);
     }
 
     for (const cap of meta.bloomCaps ?? []) {

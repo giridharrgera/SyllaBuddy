@@ -34,7 +34,6 @@ export function renderHtml(doc: SyllabusDoc): string {
   const unitHours = spec.units.reduce((sum, unit) => sum + unit.hours, 0);
   const weightage = spec.assessment.reduce((sum, item) => sum + item.weightage, 0);
   const teachingTotal = spec.hours.lectures + spec.hours.lab + spec.hours.testsExams;
-  const declaredHours = doc.parseMeta?.declaredHours ?? teachingTotal;
   const coverage = coverageOf(doc);
 
   const header = `<table>
@@ -45,7 +44,7 @@ export function renderHtml(doc: SyllabusDoc): string {
   const creditsRows = [
     ["Number of Credits", String(C)],
     ["Credit Structure (Lecture: Tutorial: Practical)", `${L}:${T}:${P}`],
-    ["Total Hours of Interaction", String(declaredHours)],
+    ["Total Hours of Interaction", String(teachingTotal)],
     ["Department Responsible", spec.department],
     ["Total Course Marks", "100"],
     ["Pass Criterion", "As per the Academic Regulations"],

@@ -66,8 +66,9 @@ describe("buildSpecforgeOutput", () => {
   it("reports input problems as coded defects", () => {
     const output = buildSpecforgeOutput(sampleDoc());
 
-    expect(output.defects.map((defect) => defect.code)).toContain("WRONG_TEMPLATE");
-    expect(output.defects.every((defect) => defect.location.source === "spec")).toBe(true);
+    const templateDefect = output.defects.find((defect) => defect.code === "WRONG_TEMPLATE");
+    expect(templateDefect?.location).toEqual({ source: "template", section: null, refs: [] });
+    expect(output.defects.every((defect) => "section" in defect.location && Array.isArray(defect.location.refs))).toBe(true);
   });
 
   it("collapses duplicate CO ids coming from nested tables", () => {
