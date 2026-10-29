@@ -52,12 +52,12 @@ export default function SyllaBuddyRoute() {
   };
 
   return (
-    <div className="min-h-full bg-background text-foreground">
-      <header className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur">
+    <div className="min-h-full bg-gradient-to-br from-indigo-50 via-white to-fuchsia-50 text-foreground">
+      <header className="sticky top-0 z-10 border-b border-indigo-100 bg-white/80 shadow-sm backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">S</span>
-            <span className="text-lg font-semibold">SyllaBuddy</span>
+            <span className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-fuchsia-500 text-sm font-bold text-white shadow-md">S</span>
+            <span className="bg-gradient-to-r from-indigo-600 to-fuchsia-600 bg-clip-text text-lg font-bold text-transparent">SyllaBuddy</span>
           </div>
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -84,13 +84,15 @@ export default function SyllaBuddyRoute() {
               key={s.n}
               type="button"
               onClick={() => setStep(s.n)}
-              className={`flex items-center gap-3 rounded-xl border p-4 text-left shadow-sm transition-colors ${
-                step === s.n ? "border-primary bg-indigo-50" : "border-border bg-card hover:bg-muted/40"
+              className={`flex items-center gap-3 rounded-xl border p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
+                step === s.n
+                  ? "border-transparent bg-gradient-to-r from-indigo-500 to-fuchsia-500 text-white shadow-lg"
+                  : "border-indigo-100 bg-white hover:border-fuchsia-200"
               }`}
             >
               <span
                 className={`flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
-                  step === s.n ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                  step === s.n ? "bg-white text-indigo-600" : "bg-indigo-100 text-indigo-600"
                 }`}
               >
                 {s.n}
