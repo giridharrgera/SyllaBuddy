@@ -6,7 +6,7 @@ import { MapStep } from "@/components/syllabuddy/map-step";
 import { ReviewStep } from "@/components/syllabuddy/review-step";
 import { UploadStep } from "@/components/syllabuddy/upload-step";
 import { StatusChip } from "@/components/syllabuddy/ui";
-import type { Role } from "@/lib/syllabuddy-types";
+import type { Role, Template } from "@/lib/syllabuddy-types";
 
 export function meta() {
   return [{ title: "SyllaBuddy" }, { name: "description", content: "Clean up course specs and build CO-PO-PSO maps" }];
@@ -30,11 +30,12 @@ export default function SyllaBuddyRoute() {
   const doc = data?.doc;
   const refresh = () => queryClient.invalidateQueries();
 
-  const generate = async (spec: File, blueprint: File | null) => {
+  const generate = async (spec: File, blueprint: File | null, template: Template) => {
     setBusy(true);
     setUploadError(null);
     const form = new FormData();
     form.append("role", role);
+    form.append("template", template);
     form.append("spec", spec);
     if (blueprint) form.append("blueprint", blueprint);
     try {

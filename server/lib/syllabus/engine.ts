@@ -7,6 +7,7 @@ import {
   type MapCell,
   type Spec,
   type SyllabusDoc,
+  type Template,
   type Unit,
 } from "../../../app/lib/syllabuddy-types";
 import {
@@ -133,7 +134,11 @@ function fixTypos(text: string, changes: string[]): string {
   return out;
 }
 
-export function buildSpec(specText: string, blueprintText: string): { spec: Spec; changes: string[] } {
+export function buildSpec(
+  specText: string,
+  blueprintText: string,
+  template: Template,
+): { spec: Spec; changes: string[] } {
   const changes: string[] = [];
   const specLines = toLines(specText);
   const bpLines = blueprintText ? toLines(blueprintText) : [];
@@ -210,7 +215,7 @@ export function buildSpec(specText: string, blueprintText: string): { spec: Spec
     title: extractTitle(specText),
     code,
     credits,
-    template: credits.P > 0 ? "integrated" : "non-lab",
+    template,
     summary: fixTypos(summary, changes),
     cos: withBloom(cos.map((co) => ({ ...co, text: fixTypos(co.text, changes) }))),
     units: units.map((u) => ({ ...u, title: fixTypos(u.title, changes), content: fixTypos(u.content, changes) })),
@@ -224,8 +229,8 @@ function keywordsOf(text: string): string[] {
   return (text.toLowerCase().match(/[a-z]{4,}/g) ?? []);
 }
 
-export function generateDoc(specText: string, blueprintText: string): SyllabusDoc {
-  const { spec, changes } = buildSpec(specText, blueprintText);
+export function generateDoc(specText: string, blueprintText: string, template: Template): SyllabusDoc {
+  const { spec, changes } = buildSpec(specText, blueprintText, template);
   return {
     status: "Draft",
     generated: true,

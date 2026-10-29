@@ -1,7 +1,7 @@
 import { useState, type DragEvent } from "react";
 import { IconFileText, IconUpload } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
-import type { Role } from "@/lib/syllabuddy-types";
+import type { Role, Template } from "@/lib/syllabuddy-types";
 import { Card } from "./ui";
 
 function DropZone({
@@ -56,10 +56,11 @@ export function UploadStep({
   role: Role;
   busy: boolean;
   error: string | null;
-  onGenerate: (spec: File, blueprint: File | null) => void;
+  onGenerate: (spec: File, blueprint: File | null, template: Template) => void;
 }) {
   const [spec, setSpec] = useState<File | null>(null);
   const [blueprint, setBlueprint] = useState<File | null>(null);
+  const [template, setTemplate] = useState<Template | "">("");
   const isAuthor = role === "author";
 
   return (
@@ -77,10 +78,26 @@ export function UploadStep({
           disabled={!isAuthor || busy}
         />
       </div>
+      <label className="flex flex-col gap-1 text-sm font-medium text-foreground md:max-w-xs">
+        Template
+        <select
+          value={template}
+          onChange={(e) => setTemplate(e.target.value as Template | "")}
+          disabled={!isAuthor || busy}
+          className="rounded-lg border border-border bg-card px-3 py-2 font-normal"
+        >
+          <option value="">Choose a template</option>
+          <option value="integrated">Integrated (Theory + Lab)</option>
+          <option value="non-lab">Non-lab</option>
+        </select>
+      </label>
       {!isAuthor && <p className="text-sm text-muted-foreground">Only the Author can upload. Switch role to Author to start.</p>}
       {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
       <div>
-        <Button onClick={() => spec && onGenerate(spec, blueprint)} disabled={!isAuthor || !spec || busy}>
+        <Button
+          onClick={() => spec && template && onGenerate(spec, blueprint, template)}
+          disabled={!isAuthor || !spec || !template || busy}
+        >
           {busy ? "Generating..." : "Generate corrected spec"}
         </Button>
       </div>
