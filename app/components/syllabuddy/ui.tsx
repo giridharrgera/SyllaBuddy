@@ -4,16 +4,16 @@ import { cn } from "@/lib/utils";
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn("rounded-xl border border-border bg-card p-5 shadow-sm", className)}>{children}</div>
+    <div className={cn("rounded-2xl border border-indigo-100 bg-white p-6 shadow-lg shadow-indigo-100/50", className)}>{children}</div>
   );
 }
 
 const STATUS_STYLES: Record<Status, string> = {
   Draft: "bg-slate-100 text-slate-700",
-  Submitted: "bg-indigo-50 text-indigo-700",
-  Returned: "bg-amber-50 text-amber-800",
-  Forwarded: "bg-indigo-50 text-indigo-700",
-  Approved: "bg-emerald-50 text-emerald-700",
+  Submitted: "bg-sky-100 text-sky-700",
+  Returned: "bg-amber-100 text-amber-800",
+  Forwarded: "bg-violet-100 text-violet-700",
+  Approved: "bg-emerald-100 text-emerald-700",
 };
 
 export function StatusChip({ status }: { status: Status }) {

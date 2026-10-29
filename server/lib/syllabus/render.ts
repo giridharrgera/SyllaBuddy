@@ -74,4 +74,3 @@ th{background:#f5f5f4}.matrix td,.matrix th{text-align:center;width:6%}
 <h2>Changes made</h2><ul>${changes || "<li>None</li>"}</ul>
 </body></html>`;
 }
-
