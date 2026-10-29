@@ -188,7 +188,7 @@ function fixTypos(text: string, changes: string[], hits: TypoHit[], section: num
     }
   }
   for (const { re, right } of BROKEN_REFERENCES) {
-    const found = out.match(re)?.[0];
+    const found = out.match(re)?.[0]?.trim();
     if (found) {
       changes.push(`Broken reference fixed in section ${section}: "${found}" to "${right}"`);
       hits.push({ wrong: found, right, section });
