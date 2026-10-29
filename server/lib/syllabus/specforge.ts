@@ -416,20 +416,15 @@ function buildDefects(doc: SyllabusDoc, spec: Spec, cos: CourseOutcome[], covera
   }
 
   /**
-   * Only contradictions that the inputs themselves prove are reported. Mapping levels,
-   * wording and style are judgement calls, so they stay in the validation report instead
-   * of diluting the defect list.
+   * Wording and style notes are kept in the validation report rather than the defect list:
+   * only contradictions, mapping-rule breaks and reference typos are reported here.
    */
-  const MATERIAL: ReadonlySet<DefectCode> = new Set<DefectCode>([
-    "CO_MISSING_IN_TABLE",
-    "CO_EXTRA_IN_TABLE",
-    "PSO_COLUMN_MISMATCH",
-    "HOURS_INCONSISTENT",
-    "SECTION_NOT_IN_TEMPLATE",
-    "MARKS_INCONSISTENT",
-    "SUMMARY_SYLLABUS_MISMATCH",
-  ]);
-  return defects.filter((defect) => MATERIAL.has(defect.code));
+  return defects.filter(
+    (defect) =>
+      defect.code !== "LABEL_OR_TITLE_MISMATCH" &&
+      defect.code !== "OTHER" &&
+      !(defect.code === "TYPO_OR_FORMAT" && defect.location.section !== 9),
+  );
 }
 
 export function assertSpecforgeOutput(value: unknown): asserts value is SpecforgeOutput {
