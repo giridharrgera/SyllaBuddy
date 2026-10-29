@@ -11,6 +11,14 @@ export default defineConfig({
     dedupe: ["react", "react-dom"],
   },
   optimizeDeps: {
+    include: [
+      "react",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
+      "react-dom",
+      "react-dom/client",
+      "@agent-native/toolkit/provider",
+    ],
     entries: [
       "app/entry.client.tsx",
       "app/root.tsx",
