@@ -1,5 +1,6 @@
 import {
   MAP_COLUMNS,
+  MAP_STATEMENTS,
   type Check,
   type CourseOutcome,
   type MapColumn,
@@ -21,12 +22,12 @@ import {
 } from "./extract";
 
 const BLOOM_LEVELS: { bloom: number; name: string; verbs: string[] }[] = [
-  { bloom: 1, name: "Remember", verbs: ["define", "list", "recall", "state"] },
-  { bloom: 2, name: "Understand", verbs: ["explain", "describe", "summarise", "summarize", "classify"] },
-  { bloom: 3, name: "Apply", verbs: ["apply", "solve", "use", "implement"] },
-  { bloom: 4, name: "Analyse", verbs: ["analyse", "analyze", "compare", "differentiate", "select"] },
-  { bloom: 5, name: "Evaluate", verbs: ["evaluate", "assess", "justify", "critique"] },
-  { bloom: 6, name: "Create", verbs: ["design", "develop", "build", "construct", "create"] },
+  { bloom: 1, name: "Remember", verbs: ["define", "list", "recall", "state", "name", "identify"] },
+  { bloom: 2, name: "Understand", verbs: ["explain", "describe", "summarise", "summarize", "classify", "discuss", "interpret"] },
+  { bloom: 3, name: "Apply", verbs: ["apply", "solve", "use", "implement", "compute", "demonstrate"] },
+  { bloom: 4, name: "Analyse", verbs: ["analyse", "analyze", "compare", "differentiate", "examine", "distinguish", "select"] },
+  { bloom: 5, name: "Evaluate", verbs: ["evaluate", "assess", "justify", "critique", "judge", "recommend"] },
+  { bloom: 6, name: "Create", verbs: ["design", "develop", "build", "construct", "formulate", "propose", "create"] },
 ];
 
 const PO_KEYWORDS: Record<MapColumn, RegExp> = {
@@ -55,7 +56,7 @@ const TYPOS: Record<string, string> = {
 };
 
 export const DEFAULT_ANNEXURE: Record<MapColumn, string> = Object.fromEntries(
-  MAP_COLUMNS.map((col) => [col, `${col}: placeholder, paste the official wording here`]),
+  MAP_COLUMNS.map((col) => [col, `${col}: ${MAP_STATEMENTS[col]}`]),
 ) as Record<MapColumn, string>;
 
 export function detectBloom(text: string): { bloom: number; bloomName: string; verb: string } {

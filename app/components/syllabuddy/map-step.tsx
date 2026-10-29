@@ -146,7 +146,7 @@ export function MapStep({
       <Card className="flex flex-col gap-3">
         <div>
           <h2 className="font-semibold">Annexure A</h2>
-          <p className="text-sm text-muted-foreground">Wording for each PO and PSO. Paste the official text over the placeholders.</p>
+          <p className="text-sm text-muted-foreground">Wording for each PO and PSO, seeded from the programme definitions. Edit as needed.</p>
         </div>
         {MAP_COLUMNS.map((col) => (
           <AnnexureRow
