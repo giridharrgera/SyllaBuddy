@@ -310,6 +310,26 @@ function buildDefects(doc: SyllabusDoc, spec: Spec, cos: CourseOutcome[], covera
         SECTION.summary,
       );
     }
+
+    for (const label of meta.labelMismatches ?? []) {
+      at(
+        "LABEL_OR_TITLE_MISMATCH",
+        `Section ${label.section} says "${label.found}", but the template heading or unit title is "${label.expected}".`,
+        `Rename it to "${label.expected}".`,
+        label.section,
+        label.refs,
+      );
+    }
+
+    for (const cell of meta.practicalUnsupported ?? []) {
+      at(
+        "MAPPING_UNSUPPORTED",
+        `${cell.co} is mapped ${cell.from} to ${cell.col}, but it is assessed only through ${cell.names.join(", ")}, which is not practical or assignment work.`,
+        `Lower the ${cell.col} mapping to ${cell.to}.`,
+        SECTION.map,
+        [cell.co, cell.col],
+      );
+    }
   } else {
     for (const co of cos) {
       if (!doc.map[co.id]) {

@@ -236,7 +236,7 @@ function normalizeCoverage(grid: ReturnType<typeof extractAssessmentTable>): Spe
 }
 
 /** How many words of a unit's content the summary borrows to name its themes. */
-const THEME_WORDS = 30;
+const THEME_WORDS = 80;
 
 function unitTheme(unit: Unit): string {
   const words = unit.content.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
@@ -263,6 +263,36 @@ function summaryWithUnits(summary: string, units: Unit[]): { text: string; added
 
 function keywordsOf(text: string): string[] {
   return text.toLowerCase().match(/[a-z]{4,}/g) ?? [];
+}
+
+const LABEL_UNIT = /^(?:unit|module)\s*[-–:.]?\s*(\d+)/i;
+const LAB_LABEL = /\blab\s+exercises?\s+on\s+(.+?)[.:]?$/i;
+
+function findLabelMismatches(lines: string[], units: Unit[]): NonNullable<ParseMeta["labelMismatches"]> {
+  const found: NonNullable<ParseMeta["labelMismatches"]> = [];
+  const heading = lines.find((line) => /Achieving\s+Cos\b/.test(line));
+  if (heading) {
+    found.push({ section: 8, refs: [], found: heading, expected: "Achieving COs" });
+  }
+  const byNo = new Map(units.map((unit) => [unit.no, unit]));
+  let current = "";
+  for (const line of lines) {
+    const unit = LABEL_UNIT.exec(line);
+    if (unit) current = unit[1] ?? "";
+    const label = LAB_LABEL.exec(line);
+    if (!label || !current) continue;
+    const own = byNo.get(current);
+    if (!own) continue;
+    const ownWords = new Set(keywordsOf(own.title));
+    const labelWords = keywordsOf(label[1] ?? "");
+    if (!labelWords.length || labelWords.some((word) => ownWords.has(word))) continue;
+    const other = units.find(
+      (unit) => unit.no !== current && keywordsOf(unit.title).some((word) => labelWords.includes(word)),
+    );
+    if (!other) continue;
+    found.push({ section: 4, refs: [`Unit-${current}`], found: label[1]!.trim(), expected: own.title });
+  }
+  return found;
 }
 
 export function buildSpec(
@@ -404,6 +434,8 @@ export function buildSpec(
     summaryCoversUnits: summaryUnits.covered,
     ...(typos.length ? { typos } : {}),
   };
+  const labels = findLabelMismatches(specLines, spec.units);
+  if (labels.length) parseMeta.labelMismatches = labels;
 
   return { spec, changes, parseMeta, mapGrid };
 }
@@ -414,6 +446,7 @@ function buildDocMap(
   changes: string[],
   caps: NonNullable<ParseMeta["bloomCaps"]>,
   unsupported: NonNullable<ParseMeta["unsupportedCells"]>,
+  practical: NonNullable<ParseMeta["practicalUnsupported"]>,
 ): SyllabusDoc["map"] {
   const heuristic = buildMap(spec);
   const map: SyllabusDoc["map"] = {};
@@ -460,6 +493,23 @@ function buildDocMap(
       map[co.id] = cells;
     }
   }
+
+  const PRACTICAL = /lab|practical|project|assignment|seminar|presentation|viva|studio|workshop/i;
+  for (const co of spec.cos) {
+    const cells = map[co.id];
+    if (!cells) continue;
+    const names = spec.coCoverage?.[co.id] ?? [];
+    if (!names.length || names.some((name) => PRACTICAL.test(name))) continue;
+    for (const col of ["PO-3", "PO-5"] as MapColumn[]) {
+      const cell = cells[col];
+      if (!cell || cell.value < 2) continue;
+      practical.push({ co: co.id, col, from: cell.value, to: 1, names });
+      cells[col] = {
+        value: 1,
+        reason: `${co.id} is assessed only through ${names.join(", ")}, so its contribution to ${col} is moderate.`,
+      };
+    }
+  }
   return map;
 }
 
@@ -473,9 +523,11 @@ export function generateDoc(
   const { spec, changes, parseMeta, mapGrid } = buildSpec(specText, blueprintText, template, fallbackInputId, tables);
   const caps: NonNullable<ParseMeta["bloomCaps"]> = [];
   const unsupported: NonNullable<ParseMeta["unsupportedCells"]> = [];
-  const map = buildDocMap(spec, mapGrid, changes, caps, unsupported);
+  const practical: NonNullable<ParseMeta["practicalUnsupported"]> = [];
+  const map = buildDocMap(spec, mapGrid, changes, caps, unsupported, practical);
   if (caps.length) parseMeta.bloomCaps = caps;
   if (unsupported.length) parseMeta.unsupportedCells = unsupported;
+  if (practical.length) parseMeta.practicalUnsupported = practical;
   return {
     status: "Draft",
     generated: true,

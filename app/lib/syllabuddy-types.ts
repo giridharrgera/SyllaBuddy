@@ -97,6 +97,10 @@ export interface ParseMeta {
   summaryCoversUnits?: boolean;
   /** Source cells on PO-6..PO-11, which need explicit evidence a course text rarely gives. */
   unsupportedCells?: { co: string; col: string; level: number }[];
+  /** Strong PO-3/PO-5 cells lowered because the CO has no practical or assignment assessment. */
+  practicalUnsupported?: { co: string; col: string; from: number; to: number; names: string[] }[];
+  /** Headings and unit labels in the input that disagree with the official template. */
+  labelMismatches?: { section: number; refs: string[]; found: string; expected: string }[];
 }
 
 export interface MapCell {
