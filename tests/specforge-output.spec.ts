@@ -65,9 +65,27 @@ describe("buildSpecforgeOutput", () => {
 
   it("reports input problems as coded defects", () => {
     const output = buildSpecforgeOutput(sampleDoc());
+    const allowed = [
+      "CO_MISSING_IN_TABLE",
+      "CO_EXTRA_IN_TABLE",
+      "CO_ASSESSMENT_MISMATCH",
+      "PSO_COLUMN_MISMATCH",
+      "MAPPING_BLOOM_MISMATCH",
+      "MAPPING_UNSUPPORTED",
+      "WRONG_TEMPLATE",
+      "PLACEHOLDER_TEXT",
+      "SUMMARY_SYLLABUS_MISMATCH",
+      "LABEL_OR_TITLE_MISMATCH",
+      "HOURS_INCONSISTENT",
+      "WEIGHTAGE_INCONSISTENT",
+      "TYPO_OR_FORMAT",
+      "SECTION_NOT_IN_TEMPLATE",
+      "MARKS_INCONSISTENT",
+      "OTHER",
+    ];
 
     expect(output.defects.every((defect) => "section" in defect.location && Array.isArray(defect.location.refs))).toBe(true);
-    expect(output.defects.map((defect) => defect.code)).not.toContain("LABEL_OR_TITLE_MISMATCH");
+    expect(output.defects.every((defect) => allowed.includes(defect.code))).toBe(true);
   });
 
   it("collapses duplicate CO ids coming from nested tables", () => {
@@ -110,6 +128,29 @@ describe("buildSpecforgeOutput", () => {
 
     expect(codes).toContain("SUMMARY_SYLLABUS_MISMATCH");
     expect(codes).toContain("MAPPING_UNSUPPORTED");
+  });
+
+  it("keeps label mismatches and the laboratory skill rule in the list", () => {
+    const doc = sampleDoc();
+    doc.parseMeta = {
+      sectionCos: ["CO-1", "CO-2"],
+      mapCos: ["CO-1", "CO-2"],
+      assessedCos: ["CO-1", "CO-2"],
+      mapColumns: [...MAP_COLUMNS],
+      declaredHours: null,
+      tableHours: null,
+      droppedSections: [],
+      blueprintMarks: { maximum: null, total: null },
+      summaryCoversUnits: true,
+      labelMismatches: [{ section: 4, refs: ["Unit-1"], found: "Graph Theory", expected: "Graph Algorithms" }],
+      practicalSkills: { skill: "Practical Skills", method: "Assignment" },
+    };
+
+    const output = buildSpecforgeOutput(doc);
+    const codes = output.defects.map((defect) => defect.code);
+
+    expect(codes).toContain("LABEL_OR_TITLE_MISMATCH");
+    expect(codes).toContain("OTHER");
   });
 
   it("refuses to emit a document with no course outcomes", () => {

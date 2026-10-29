@@ -415,16 +415,7 @@ function buildDefects(doc: SyllabusDoc, spec: Spec, cos: CourseOutcome[], covera
     }
   }
 
-  /**
-   * Wording and style notes are kept in the validation report rather than the defect list:
-   * only contradictions, mapping-rule breaks and reference typos are reported here.
-   */
-  return defects.filter(
-    (defect) =>
-      defect.code !== "LABEL_OR_TITLE_MISMATCH" &&
-      defect.code !== "OTHER" &&
-      !(defect.code === "TYPO_OR_FORMAT" && defect.location.section !== 9),
-  );
+  return defects;
 }
 
 export function assertSpecforgeOutput(value: unknown): asserts value is SpecforgeOutput {
