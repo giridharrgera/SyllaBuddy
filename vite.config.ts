@@ -7,7 +7,18 @@ const agentNativePlugins = agentNative as unknown as (
   options?: Parameters<typeof agentNative>[0],
 ) => any[];
 export default defineConfig({
+  resolve: {
+    dedupe: ["react", "react-dom"],
+  },
   optimizeDeps: {
+    include: [
+      "react",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
+      "react-dom",
+      "react-dom/client",
+      "@agent-native/toolkit/provider",
+    ],
     entries: [
       "app/entry.client.tsx",
       "app/root.tsx",

@@ -38,14 +38,14 @@ visual direction — read and preserve them on every subsequent build; do not
 re-derive a new direction. The first UI pass must fill these fields in as
 part of that build, not leave them as an empty template.
 
-- Product mode: `operate` | `read` | `persuade` | `experience`
-- Audience and cadence:
-- Visual world (name + the feeling it creates):
-- Palette family + neutral undertone:
-- Type treatment:
-- Composition:
-- Shape language:
-- Anti-references (defaults this app must not drift toward):
+- Product mode: `operate`
+- Audience and cadence: university faculty and reviewers working through course specs in short bursts before submission deadlines.
+- Visual world (name + the feeling it creates): "Study desk" — calm, light, student-like; off-white paper with soft pastel accents and a friendly, uncluttered feel.
+- Palette family + neutral undertone: indigo primary (#6366F1), mint for success, amber for warnings, rose for errors; warm off-white neutrals (#FAFAF8 background).
+- Type treatment: Inter throughout; short plain-English labels, medium-weight section titles, no jargon.
+- Composition: four-step stepper under a slim top bar; one primary button per screen; two-column review (form left, validation report right); heatmap table for the map step.
+- Shape language: rounded-xl cards, 1px borders, subtle shadow, pastel sticky-note comments; simple fades only, no other motion.
+- Anti-references (defaults this app must not drift toward): dense enterprise dashboards, dark-first developer tooling, gradient-heavy marketing styling, animated decoration.
 
 ## Agent-Native is structural, not visual
 
