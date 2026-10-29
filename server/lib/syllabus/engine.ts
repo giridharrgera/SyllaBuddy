@@ -130,6 +130,19 @@ export function detectTemplate(credits: Credits, courseType: string, units: Unit
 /** PO-6..PO-11 need evidence from the syllabus or assessment, so a CO statement alone cannot fill them. */
 const EVIDENCE_COLUMNS = new Set<MapColumn>(["PO-6", "PO-7", "PO-8", "PO-9", "PO-10", "PO-11"]);
 
+/** Section 8 names how each capability is imparted; a named method is the evidence PO-6..PO-11 need. */
+function skillsEvidence(spec: Spec): { col: MapColumn; method: string }[] {
+  const rows = spec.skills ?? [];
+  const named = (pattern: RegExp) =>
+    rows.find((row) => pattern.test(row.skill) && !/^--?$/.test(row.method.trim()))?.method;
+  const evidence: { col: MapColumn; method: string }[] = [];
+  const written = named(/written\s+communication/i);
+  const selfLearning = named(/self-learning/i);
+  if (written) evidence.push({ col: "PO-9", method: written });
+  if (selfLearning) evidence.push({ col: "PO-11", method: selfLearning });
+  return evidence;
+}
+
 export function buildMap(spec: Spec): SyllabusDoc["map"] {
   const map: SyllabusDoc["map"] = {};
   for (const co of spec.cos) {
@@ -517,6 +530,19 @@ function buildDocMap(
       };
       map[co.id] = cells;
     }
+  }
+
+  const evidence = skillsEvidence(spec);
+  for (const co of spec.cos) {
+    const cells = map[co.id] ?? {};
+    for (const { col, method } of evidence) {
+      if (cells[col]) continue;
+      cells[col] = {
+        value: 1,
+        reason: `Section 8 imparts ${col === "PO-9" ? "written communication" : "self-learning"} through ${method}, and ${co.id} is assessed through ${(spec.coCoverage?.[co.id] ?? []).join(", ") || "the course assessment"}, so ${col} gets a moderate contribution.`,
+      };
+    }
+    map[co.id] = cells;
   }
 
   const PRACTICAL = /lab|practical|project|assignment|seminar|presentation|viva|studio|workshop/i;
