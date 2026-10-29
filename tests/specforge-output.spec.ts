@@ -83,6 +83,13 @@ describe("buildSpecforgeOutput", () => {
     expect(Object.keys(output.co_po_pso_map)).toEqual(["CO-1", "CO-2"]);
   });
 
+  it("falls back to the pack id when the doc carries none", () => {
+    const doc = sampleDoc();
+    doc.spec!.inputId = "  ";
+
+    expect(buildSpecforgeOutput(doc).input_id).toBe("SAMPLE");
+  });
+
   it("refuses to emit a document with no course outcomes", () => {
     const doc = sampleDoc();
     doc.spec!.cos = [];

@@ -7,7 +7,7 @@ import {
   type Spec,
   type SyllabusDoc,
 } from "../../../app/lib/syllabuddy-types";
-import { IMPLEMENTATION_VERB, SAMPLE_TEXT } from "./engine";
+import { DEFAULT_INPUT_ID, IMPLEMENTATION_VERB, SAMPLE_TEXT } from "./engine";
 import { SPECFORGE_OUTPUT_SCHEMA } from "./specforge-schema";
 
 export type SpecforgeTemplate = "integrated" | "non_lab";
@@ -295,7 +295,7 @@ export function buildSpecforgeOutput(doc: SyllabusDoc): SpecforgeOutput {
   const coverage = buildCoCoverage(cos, spec);
   const output: SpecforgeOutput = {
     schema_version: "1.0",
-    input_id: spec.inputId ?? "",
+    input_id: spec.inputId?.trim() || DEFAULT_INPUT_ID,
     template: toSpecforgeTemplate(spec.template),
     course: {
       title: spec.title ?? "",

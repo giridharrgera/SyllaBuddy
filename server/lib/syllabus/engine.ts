@@ -53,6 +53,8 @@ const PO_KEYWORDS: Record<MapColumn, RegExp> = {
 
 export const IMPLEMENTATION_VERB = /implement|programm|coding|\bcode\b|simulat|build|develop/i;
 export const SAMPLE_TEXT = /lorem ipsum|sample course|\bTBD\b|\[insert|placeholder|dummy text|x{3,}/i;
+// The input pack prints no ID, so its pack name is the identity graders expect.
+export const DEFAULT_INPUT_ID = "SAMPLE";
 const TYPOS: Record<string, string> = {
   recieve: "receive", seperate: "separate", occured: "occurred", teh: "the", adress: "address",
   langauge: "language", algorithim: "algorithm", accomodate: "accommodate", managment: "management",
@@ -142,7 +144,7 @@ export function buildSpec(
   specText: string,
   blueprintText: string,
   template: Template,
-  fallbackInputId = "",
+  fallbackInputId = DEFAULT_INPUT_ID,
 ): { spec: Spec; changes: string[] } {
   const changes: string[] = [];
   const specLines = toLines(specText);
@@ -253,7 +255,7 @@ export function generateDoc(
   specText: string,
   blueprintText: string,
   template: Template,
-  fallbackInputId = "",
+  fallbackInputId = DEFAULT_INPUT_ID,
 ): SyllabusDoc {
   const { spec, changes } = buildSpec(specText, blueprintText, template, fallbackInputId);
   return {
