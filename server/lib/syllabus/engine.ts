@@ -14,9 +14,13 @@ import {
   extractAssessment,
   extractCode,
   extractCourseOutcomes,
+  extractCourseType,
   extractCredits,
+  extractDepartment,
+  extractInputId,
   extractResources,
   extractSummary,
+  extractTeachingHours,
   extractTitle,
   extractUnits,
   toLines,
@@ -47,8 +51,8 @@ const PO_KEYWORDS: Record<MapColumn, RegExp> = {
   "PSO-2": /implement|tool|practic|lab\b|deploy|hands-on/i,
 };
 
-const IMPLEMENTATION_VERB = /implement|programm|coding|\bcode\b|simulat|build|develop/i;
-const SAMPLE_TEXT = /lorem ipsum|sample course|\bTBD\b|\[insert|placeholder|dummy text|x{3,}/i;
+export const IMPLEMENTATION_VERB = /implement|programm|coding|\bcode\b|simulat|build|develop/i;
+export const SAMPLE_TEXT = /lorem ipsum|sample course|\bTBD\b|\[insert|placeholder|dummy text|x{3,}/i;
 const TYPOS: Record<string, string> = {
   recieve: "receive", seperate: "separate", occured: "occurred", teh: "the", adress: "address",
   langauge: "language", algorithim: "algorithm", accomodate: "accommodate", managment: "management",
@@ -138,6 +142,7 @@ export function buildSpec(
   specText: string,
   blueprintText: string,
   template: Template,
+  fallbackInputId = "",
 ): { spec: Spec; changes: string[] } {
   const changes: string[] = [];
   const specLines = toLines(specText);
@@ -211,16 +216,31 @@ export function buildSpec(
     changes.push(`Weightages totalled ${total}%; scaled to 100%`);
   }
 
+  const teachingHours = extractTeachingHours(specText);
+  const unitHoursTotal = units.reduce((sum, u) => sum + u.hours, 0);
   const spec: Spec = {
+    inputId: extractInputId(specText) || fallbackInputId,
     title: extractTitle(specText),
     code,
+    department: extractDepartment(specText),
+    courseType: extractCourseType(specText),
     credits,
     template,
     summary: fixTypos(summary, changes),
     cos: withBloom(cos.map((co) => ({ ...co, text: fixTypos(co.text, changes) }))),
-    units: units.map((u) => ({ ...u, title: fixTypos(u.title, changes), content: fixTypos(u.content, changes) })),
+    units: units.map((u) => ({
+      ...u,
+      title: fixTypos(u.title, changes),
+      content: fixTypos(u.content, changes),
+      lab: u.lab ? fixTypos(u.lab, changes) : null,
+    })),
     assessment,
     resources: fixTypos(resources, changes),
+    hours: {
+      lectures: teachingHours.lectures ?? (unitHoursTotal || theoryHours),
+      lab: teachingHours.lab ?? credits.P,
+      testsExams: teachingHours.testsExams ?? 0,
+    },
   };
   return { spec, changes };
 }
@@ -229,8 +249,13 @@ function keywordsOf(text: string): string[] {
   return (text.toLowerCase().match(/[a-z]{4,}/g) ?? []);
 }
 
-export function generateDoc(specText: string, blueprintText: string, template: Template): SyllabusDoc {
-  const { spec, changes } = buildSpec(specText, blueprintText, template);
+export function generateDoc(
+  specText: string,
+  blueprintText: string,
+  template: Template,
+  fallbackInputId = "",
+): SyllabusDoc {
+  const { spec, changes } = buildSpec(specText, blueprintText, template, fallbackInputId);
   return {
     status: "Draft",
     generated: true,

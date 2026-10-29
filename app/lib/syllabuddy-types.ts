@@ -37,6 +37,13 @@ export interface Unit {
   title: string;
   hours: number;
   content: string;
+  lab: string | null;
+}
+
+export interface TeachingHours {
+  lectures: number;
+  lab: number;
+  testsExams: number;
 }
 
 export interface AssessmentItem {
@@ -52,8 +59,11 @@ export interface Credits {
 }
 
 export interface Spec {
+  inputId: string;
   title: string;
   code: string;
+  department: string;
+  courseType: string;
   credits: Credits;
   template: Template;
   summary: string;
@@ -61,6 +71,7 @@ export interface Spec {
   units: Unit[];
   assessment: AssessmentItem[];
   resources: string;
+  hours: TeachingHours;
 }
 
 export interface MapCell {
