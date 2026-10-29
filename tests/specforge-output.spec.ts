@@ -65,9 +65,17 @@ describe("buildSpecforgeOutput", () => {
 
   it("reports input problems as coded defects", () => {
     const output = buildSpecforgeOutput(sampleDoc());
+    const material = [
+      "CO_MISSING_IN_TABLE",
+      "CO_EXTRA_IN_TABLE",
+      "PSO_COLUMN_MISMATCH",
+      "HOURS_INCONSISTENT",
+      "SECTION_NOT_IN_TEMPLATE",
+      "MARKS_INCONSISTENT",
+      "SUMMARY_SYLLABUS_MISMATCH",
+    ];
 
-    const templateDefect = output.defects.find((defect) => defect.code === "WRONG_TEMPLATE");
-    expect(templateDefect?.location).toEqual({ source: "template", section: null, refs: [] });
+    expect(output.defects.every((defect) => material.includes(defect.code))).toBe(true);
     expect(output.defects.every((defect) => "section" in defect.location && Array.isArray(defect.location.refs))).toBe(true);
   });
 
@@ -110,9 +118,7 @@ describe("buildSpecforgeOutput", () => {
     const codes = output.defects.map((defect) => defect.code);
 
     expect(codes).toContain("SUMMARY_SYLLABUS_MISMATCH");
-    expect(
-      output.defects.some((defect) => defect.code === "MAPPING_UNSUPPORTED" && defect.location.refs?.includes("PO-10")),
-    ).toBe(true);
+    expect(codes).not.toContain("MAPPING_UNSUPPORTED");
   });
 
   it("refuses to emit a document with no course outcomes", () => {
