@@ -1,17 +1,122 @@
-import { APP_TITLE } from "@/lib/app-config";
+import { useState } from "react";
+import { useActionQuery } from "@agent-native/core/client/hooks";
+import { useQueryClient } from "@tanstack/react-query";
+import { ExportStep } from "@/components/syllabuddy/export-step";
+import { MapStep } from "@/components/syllabuddy/map-step";
+import { ReviewStep } from "@/components/syllabuddy/review-step";
+import { UploadStep } from "@/components/syllabuddy/upload-step";
+import { StatusChip } from "@/components/syllabuddy/ui";
+import type { Role } from "@/lib/syllabuddy-types";
 
 export function meta() {
-  return [
-    { title: APP_TITLE },
-    { name: "description", content: `${APP_TITLE} app canvas` },
-  ];
+  return [{ title: "SyllaBuddy" }, { name: "description", content: "Clean up course specs and build CO-PO-PSO maps" }];
 }
 
-export default function HomeRoute() {
+const STEPS = [
+  { n: 1, label: "Upload" },
+  { n: 2, label: "Review" },
+  { n: 3, label: "CO-PO-PSO Map" },
+  { n: 4, label: "Export" },
+];
+
+export default function SyllaBuddyRoute() {
+  const [role, setRole] = useState<Role>("author");
+  const [step, setStep] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useActionQuery("get-syllabus", {});
+
+  const doc = data?.doc;
+  const refresh = () => queryClient.invalidateQueries();
+
+  const generate = async (spec: File, blueprint: File | null) => {
+    setBusy(true);
+    setUploadError(null);
+    const form = new FormData();
+    form.append("role", role);
+    form.append("spec", spec);
+    if (blueprint) form.append("blueprint", blueprint);
+    try {
+      const res = await fetch("/api/syllabus/generate", { method: "POST", body: form });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Upload failed");
+      await refresh();
+      setStep(2);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="flex h-full min-h-0 flex-1 items-center justify-center bg-background">
-      {/* TODO: FUSION_GENERATION_APP_PLACEHOLDER replace everything here with the actual app! */}
-      <p className="text-sm text-muted-foreground">Your app here</p>
+    <div className="min-h-full bg-background text-foreground">
+      <header className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">S</span>
+            <span className="text-lg font-semibold">SyllaBuddy</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              Role
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value as Role)}
+                className="rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground"
+              >
+                <option value="author">Author</option>
+                <option value="reviewer">Reviewer</option>
+                <option value="hod">HOD</option>
+              </select>
+            </label>
+            {doc && <StatusChip status={doc.status} />}
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6">
+        <nav className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {STEPS.map((s) => (
+            <button
+              key={s.n}
+              type="button"
+              onClick={() => setStep(s.n)}
+              className={`flex items-center gap-3 rounded-xl border p-4 text-left shadow-sm transition-colors ${
+                step === s.n ? "border-primary bg-indigo-50" : "border-border bg-card hover:bg-muted/40"
+              }`}
+            >
+              <span
+                className={`flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+                  step === s.n ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {s.n}
+              </span>
+              <span className="text-sm font-medium">{s.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        {isLoading || !doc ? (
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        ) : step === 1 ? (
+          <UploadStep role={role} busy={busy} error={uploadError} onGenerate={generate} />
+        ) : step === 2 ? (
+          <ReviewStep
+            key={doc.updatedAt}
+            doc={doc}
+            checks={data?.checks ?? []}
+            role={role}
+            onAfterChange={refresh}
+          />
+        ) : step === 3 ? (
+          <MapStep doc={doc} warnings={data?.warnings ?? []} role={role} />
+        ) : (
+          <ExportStep doc={doc} />
+        )}
+      </main>
     </div>
   );
 }
