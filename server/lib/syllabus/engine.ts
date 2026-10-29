@@ -3,8 +3,10 @@ import {
   MAP_STATEMENTS,
   type Check,
   type CourseOutcome,
-  type MapColumn,
+  type Credits,
   type MapCell,
+  type MapColumn,
+  type ParseMeta,
   type Spec,
   type SyllabusDoc,
   type Template,
@@ -12,19 +14,28 @@ import {
 } from "../../../app/lib/syllabuddy-types";
 import {
   extractAssessment,
+  extractAssessmentTable,
+  extractBlueprintUnits,
   extractCode,
   extractCourseOutcomes,
   extractCourseType,
   extractCredits,
+  extractCreditsTable,
   extractDepartment,
+  extractHeader,
   extractInputId,
+  extractMapTable,
   extractResources,
+  extractSkills,
   extractSummary,
   extractTeachingHours,
+  extractTeachingTable,
   extractTitle,
   extractUnits,
   toLines,
+  type MapGrid,
 } from "./extract";
+import type { Table } from "./parse";
 
 const BLOOM_LEVELS: { bloom: number; name: string; verbs: string[] }[] = [
   { bloom: 1, name: "Remember", verbs: ["define", "list", "recall", "state", "name", "identify"] },
@@ -47,8 +58,8 @@ const PO_KEYWORDS: Record<MapColumn, RegExp> = {
   "PO-9": /team|individual|group|collaborat/i,
   "PO-10": /communicat|present|report|writ|document|discuss/i,
   "PO-11": /project|financ|manag|schedul|cost/i,
-  "PSO-1": /algorithm|system|application|solv|core/i,
-  "PSO-2": /implement|tool|practic|lab\b|deploy|hands-on/i,
+  "PSO-1": /algorithm|system|application|solv|solution|comput|core/i,
+  "PSO-2": /implement|develop|software|tool|practic|lab\b|deploy|hands-on/i,
 };
 
 export const IMPLEMENTATION_VERB = /implement|programm|coding|\bcode\b|simulat|build|develop/i;
@@ -59,7 +70,8 @@ const TYPOS: Record<string, string> = {
   recieve: "receive", seperate: "separate", occured: "occurred", teh: "the", adress: "address",
   langauge: "language", algorithim: "algorithm", accomodate: "accommodate", managment: "management",
   developement: "development", enviroment: "environment", refrence: "reference", neccessary: "necessary",
-  wich: "which", untill: "until",
+  wich: "which", untill: "until", hopcropt: "Hopcroft", ulman: "Ullman",
+  "o'rielly": "O'Reilly", "o’rielly": "O’Reilly",
 };
 
 export const DEFAULT_ANNEXURE: Record<MapColumn, string> = Object.fromEntries(
@@ -84,15 +96,30 @@ export function withBloom(cos: CourseOutcome[]): CourseOutcome[] {
   });
 }
 
+export function normalizeCoId(id: string): string {
+  const digits = id.match(/\d+/)?.[0] ?? "0";
+  return `CO-${Number(digits)}`;
+}
+
+/** A mapping can never sit above the level the CO's Bloom verb supports. */
+export function bloomCeiling(bloom: number): 1 | 2 | 3 {
+  return Math.max(1, Math.min(3, Number(bloom) || 1)) as 1 | 2 | 3;
+}
+
 function maxLevelFor(bloom: number): 1 | 2 | 3 {
-  if (bloom <= 2) return 1;
-  if (bloom === 3) return 2;
-  return 3;
+  return bloomCeiling(bloom);
 }
 
 function allowedColumn(col: MapColumn, co: CourseOutcome, spec: Spec): boolean {
   if (col !== "PO-5") return true;
   return spec.credits.P > 0 || IMPLEMENTATION_VERB.test(co.text);
+}
+
+export function detectTemplate(credits: Credits, courseType: string, units: Unit[]): Template {
+  if (credits.P > 0) return "integrated";
+  if (/laborator|practical|\blab\b/i.test(courseType)) return "integrated";
+  if (units.some((unit) => Boolean(unit.lab))) return "integrated";
+  return "non-lab";
 }
 
 export function buildMap(spec: Spec): SyllabusDoc["map"] {
@@ -105,9 +132,10 @@ export function buildMap(spec: Spec): SyllabusDoc["map"] {
       const keyword = co.text.match(PO_KEYWORDS[col]);
       if (!keyword) continue;
       const value = maxLevelFor(co.bloom);
+      const evidence = keyword[0].toLowerCase() === verb ? `the verb "${verb}"` : `"${keyword[0]}"`;
       row[col] = {
         value,
-        reason: `Bloom ${co.bloom} ${co.bloomName} verb "${verb || "none"}" and "${keyword[0]}" in CO text give ${value}.`,
+        reason: `Bloom ${co.bloom} ${co.bloomName} supports level ${value} for ${col} through ${evidence} in the CO text.`,
       };
     }
     map[co.id] = row;
@@ -128,16 +156,75 @@ function cleanText(text: string, code: string): { text: string; removed: number 
   return { text: kept.join(" "), removed };
 }
 
-function fixTypos(text: string, changes: string[]): string {
+type TypoHit = { wrong: string; right: string; section: number };
+
+function fixTypos(text: string, changes: string[], hits: TypoHit[], section: number): string {
   let out = text;
   for (const [wrong, right] of Object.entries(TYPOS)) {
     const re = new RegExp(`\\b${wrong}\\b`, "gi");
-    if (re.test(out)) {
-      changes.push(`Typo fixed: "${wrong}" to "${right}"`);
+    const found = out.match(re)?.[0];
+    if (found) {
+      changes.push(`Typo fixed in section ${section}: "${found}" to "${right}"`);
+      hits.push({ wrong: found, right, section });
       out = out.replace(re, right);
     }
   }
   return out;
+}
+
+const TEMPLATE_SECTIONS = [
+  "course summary",
+  "course size",
+  "course outcomes",
+  "course contents",
+  "course map",
+  "course teaching",
+  "course assessment",
+  "achieving",
+  "course resources",
+];
+
+function findDroppedSections(lines: string[]): { section: number; title: string }[] {
+  const start = lines.findIndex((line) => /^course resources$/i.test(line));
+  if (start < 0) return [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^annexure\b/i.test(line)) break;
+    // Only a "Course <name>" heading can be a numbered template section.
+    if (!/^course\s+[a-z]/i.test(line)) continue;
+    if (/^course (code|title|leader)\b/i.test(line)) continue;
+    if (TEMPLATE_SECTIONS.some((title) => line.toLowerCase().startsWith(title))) continue;
+    return [{ section: 10, title: line }];
+  }
+  return [];
+}
+
+function extractBlueprintMarks(text: string): ParseMeta["blueprintMarks"] {
+  const maximum = Number(/maximum marks?\s*[:\-–]?\s*(\d+)/i.exec(text)?.[1] ?? 0) || null;
+  const total = Number(/total marks?\s*[:\-–]?\s*(\d+)/i.exec(text)?.[1] ?? 0) || null;
+  return { maximum, total };
+}
+
+function normalizeCoverage(grid: ReturnType<typeof extractAssessmentTable>): Spec["coCoverage"] {
+  if (!grid) return undefined;
+  const coverage: Record<string, string[]> = {};
+  for (const [id, components] of Object.entries(grid.coverage)) {
+    coverage[normalizeCoId(id)] = components;
+  }
+  return coverage;
+}
+
+function summaryWithUnits(summary: string, units: Unit[]): { text: string; added: boolean } {
+  const titles = units.map((unit) => unit.title).filter(Boolean);
+  if (!titles.length) return { text: summary, added: false };
+  const lowered = summary.toLowerCase();
+  const missing = titles.filter((title) => !keywordsOf(title).some((word) => lowered.includes(word)));
+  if (!missing.length) return { text: summary, added: false };
+  const sentence = `The course is organised into ${titles.length} units: ${titles.join(", ")}.`;
+  return { text: summary ? `${summary} ${sentence}` : sentence, added: true };
+}
+
+function keywordsOf(text: string): string[] {
+  return text.toLowerCase().match(/[a-z]{4,}/g) ?? [];
 }
 
 export function buildSpec(
@@ -145,22 +232,39 @@ export function buildSpec(
   blueprintText: string,
   template: Template,
   fallbackInputId = DEFAULT_INPUT_ID,
-): { spec: Spec; changes: string[] } {
+  tables: Table[] = [],
+): {
+  spec: Spec;
+  changes: string[];
+  parseMeta: ParseMeta;
+  mapGrid: MapGrid | null;
+} {
   const changes: string[] = [];
+  const typos: TypoHit[] = [];
   const specLines = toLines(specText);
   const bpLines = blueprintText ? toLines(blueprintText) : [];
-  const code = extractCode(specText);
-  const credits = extractCredits(specText);
+  const header = extractHeader(tables);
+  const creditsInfo = extractCreditsTable(tables);
+  const mapGrid = extractMapTable(tables);
+  const assessmentGrid = extractAssessmentTable(tables);
+  const teachingGrid = extractTeachingTable(tables);
+  const code = header.code || extractCode(specText);
+  const credits = creditsInfo?.credits ?? extractCredits(specText);
+  const courseType = header.courseType || extractCourseType(specText);
+  const department = header.department || extractDepartment(specText);
+  const title = header.title || extractTitle(specText);
 
-  const specCos = extractCourseOutcomes(specLines);
+  let chosenTemplate = template;
+
+  const specCos = extractCourseOutcomes(specLines).map((co) => ({ ...co, id: normalizeCoId(co.id) }));
   let cos = specCos;
   if (bpLines.length) {
-    const bpCos = extractCourseOutcomes(bpLines);
+    const bpCos = extractCourseOutcomes(bpLines).map((co) => ({ ...co, id: normalizeCoId(co.id) }));
     if (bpCos.length) {
       changes.push(
         specCos.length === bpCos.length
-          ? `Course outcomes taken from blueprint (${bpCos.length})`
-          : `CO table had ${specCos.length} rows, blueprint has ${bpCos.length}; rebuilt from blueprint`,
+          ? `Course outcomes taken from the blueprint (${bpCos.length})`
+          : `The CO table had ${specCos.length} rows and the blueprint has ${bpCos.length}; rebuilt from the blueprint`,
       );
       cos = bpCos;
     }
@@ -168,11 +272,30 @@ export function buildSpec(
 
   let units: Unit[] = extractUnits(specLines);
   if (bpLines.length) {
-    const bpUnits = extractUnits(bpLines);
+    const bpUnits = extractBlueprintUnits(blueprintText);
     if (bpUnits.length) {
-      changes.push(`Unit-wise syllabus taken from blueprint (${bpUnits.length} units)`);
-      units = bpUnits;
+      units = bpUnits.map((bp, index) => {
+        const source = units.find((unit) => unit.no === bp.no) ?? units[index];
+        return {
+          no: bp.no,
+          title: bp.title || source?.title || "",
+          hours: bp.hours || source?.hours || 0,
+          content: source?.content || bp.content,
+          lab: source?.lab ?? null,
+        };
+      });
+      changes.push(`Unit-wise syllabus and hours taken from the blueprint (${bpUnits.length} units)`);
     }
+  }
+
+  const skills = extractSkills(tables);
+
+  const detectedTemplate = detectTemplate(credits, courseType, units);
+  if (detectedTemplate !== chosenTemplate) {
+    changes.push(
+      `Template changed from ${chosenTemplate} to ${detectedTemplate}: credit structure ${credits.L}:${credits.T}:${credits.P} and course type "${courseType}".`,
+    );
+    chosenTemplate = detectedTemplate;
   }
 
   let summary = extractSummary(specLines);
@@ -185,70 +308,116 @@ export function buildSpec(
     changes.push(`Removed ${summaryClean.removed + resourcesClean.removed} leftover sentence(s) from other courses or sample text`);
   }
 
-  if (!summary && units.length) {
-    summary = `This course covers ${units.map((u) => u.title).filter(Boolean).join(", ")}.`;
-    changes.push("Summary was missing; written from the unit titles");
-  } else if (summary && units.length && !units.some((u) => keywordsOf(u.title).some((w) => summary.toLowerCase().includes(w)))) {
-    summary += ` Topics covered: ${units.map((u) => u.title).filter(Boolean).join(", ")}.`;
-    changes.push("Summary did not mention any unit; added the unit topics");
-  }
+  const summaryUnits = summaryWithUnits(summary, units);
+  summary = summaryUnits.text;
+  if (summaryUnits.added) changes.push("Summary extended so it mentions every unit");
 
-  const theoryHours = credits.L + credits.T;
-  const unitHours = units.reduce((sum, u) => sum + u.hours, 0);
-  if (units.length && theoryHours > 0 && unitHours !== theoryHours) {
-    if (unitHours === 0) {
-      units.forEach((u) => (u.hours = Math.round(theoryHours / units.length)));
-      changes.push(`Unit hours were missing; split ${theoryHours} hours evenly across units`);
-    } else {
-      const last = units[units.length - 1]!;
-      const before = last.hours;
-      last.hours = Math.max(0, last.hours + theoryHours - unitHours);
-      changes.push(`Unit ${last.no} hours changed from ${before} to ${last.hours} so units total ${theoryHours}`);
-    }
-  }
-
-  const assessment = extractAssessment(specLines);
-  const total = assessment.reduce((sum, a) => sum + a.weightage, 0);
-  if (assessment.length && total > 0 && total !== 100) {
+  const assessment = assessmentGrid?.components ?? extractAssessment(specLines);
+  const totalWeightage = assessment.reduce((sum, item) => sum + item.weightage, 0);
+  if (assessment.length && totalWeightage > 0 && totalWeightage !== 100) {
     let running = 0;
-    assessment.forEach((a, i) => {
-      a.weightage = i === assessment.length - 1 ? 100 - running : Math.round((a.weightage / total) * 100);
-      running += i === assessment.length - 1 ? 0 : a.weightage;
+    assessment.forEach((item, index) => {
+      item.weightage = index === assessment.length - 1 ? 100 - running : Math.round((item.weightage / totalWeightage) * 100);
+      running += index === assessment.length - 1 ? 0 : item.weightage;
     });
-    changes.push(`Weightages totalled ${total}%; scaled to 100%`);
+    changes.push(`Assessment weightages totalled ${totalWeightage}%; scaled to 100%`);
   }
 
-  const teachingHours = extractTeachingHours(specText);
-  const unitHoursTotal = units.reduce((sum, u) => sum + u.hours, 0);
+  const unitHoursTotal = units.reduce((sum, unit) => sum + unit.hours, 0);
+  const fallbackHours = extractTeachingHours(specText);
+  const hours = {
+    lectures: teachingGrid?.lectures ?? fallbackHours.lectures ?? (unitHoursTotal || credits.L + credits.T),
+    lab: teachingGrid?.lab ?? fallbackHours.lab ?? credits.P,
+    testsExams: teachingGrid?.testsExams ?? fallbackHours.testsExams ?? 0,
+  };
+  const coCoverage = normalizeCoverage(assessmentGrid);
+
   const spec: Spec = {
     inputId: extractInputId(specText) || fallbackInputId,
-    title: extractTitle(specText),
+    title,
     code,
-    department: extractDepartment(specText),
-    courseType: extractCourseType(specText),
+    department,
+    courseType,
     credits,
-    template,
-    summary: fixTypos(summary, changes),
-    cos: withBloom(cos.map((co) => ({ ...co, text: fixTypos(co.text, changes) }))),
-    units: units.map((u) => ({
-      ...u,
-      title: fixTypos(u.title, changes),
-      content: fixTypos(u.content, changes),
-      lab: u.lab ? fixTypos(u.lab, changes) : null,
+    template: chosenTemplate,
+    summary: fixTypos(summary, changes, typos, 1).replace(/\s+/g, " ").trim(),
+    cos: withBloom(cos.map((co) => ({ ...co, text: fixTypos(co.text, changes, typos, 3) }))),
+    units: units.map((unit) => ({
+      ...unit,
+      title: fixTypos(unit.title, changes, typos, 4),
+      content: fixTypos(unit.content, changes, typos, 4),
+      lab: unit.lab ? fixTypos(unit.lab, changes, typos, 4) : null,
     })),
     assessment,
-    resources: fixTypos(resources, changes),
-    hours: {
-      lectures: teachingHours.lectures ?? (unitHoursTotal || theoryHours),
-      lab: teachingHours.lab ?? credits.P,
-      testsExams: teachingHours.testsExams ?? 0,
-    },
+    resources: fixTypos(resources, changes, typos, 9).trim(),
+    hours,
+    ...(coCoverage ? { coCoverage } : {}),
+    ...(skills.length ? { skills } : {}),
   };
-  return { spec, changes };
+
+  const parseMeta: ParseMeta = {
+    sectionCos: specCos.map((co) => co.id),
+    mapCos: mapGrid ? mapGrid.rows.map((row) => normalizeCoId(row.co)) : specCos.map((co) => co.id),
+    assessedCos: assessmentGrid ? assessmentGrid.assessedCos.map(normalizeCoId) : [],
+    mapColumns: mapGrid ? mapGrid.columns : [...MAP_COLUMNS],
+    declaredHours: creditsInfo?.declaredHours ?? null,
+    tableHours: teachingGrid?.total ?? null,
+    droppedSections: findDroppedSections(specLines),
+    blueprintMarks: extractBlueprintMarks(blueprintText),
+    ...(typos.length ? { typos } : {}),
+  };
+
+  return { spec, changes, parseMeta, mapGrid };
 }
 
-function keywordsOf(text: string): string[] {
-  return (text.toLowerCase().match(/[a-z]{4,}/g) ?? []);
+function buildDocMap(
+  spec: Spec,
+  grid: MapGrid | null,
+  changes: string[],
+  caps: NonNullable<ParseMeta["bloomCaps"]>,
+): SyllabusDoc["map"] {
+  const heuristic = buildMap(spec);
+  const map: SyllabusDoc["map"] = {};
+  const byId = new Map(spec.cos.map((co) => [co.id, co]));
+
+  for (const row of grid?.rows ?? []) {
+    const co = byId.get(normalizeCoId(row.co));
+    if (!co) continue;
+    const cells: Partial<Record<MapColumn, MapCell>> = {};
+    for (const col of MAP_COLUMNS) {
+      const value = row.values[col];
+      if (!value) continue;
+      const ceiling = bloomCeiling(co.bloom);
+      const level = Math.min(value, ceiling) as MapCell["value"];
+      if (level !== value) {
+        changes.push(`${co.id} ${col} lowered from ${value} to ${level} because Bloom ${co.bloom} cannot support a stronger mapping`);
+        caps.push({ co: co.id, col, from: value, to: level });
+      }
+      cells[col] = {
+        value: level,
+        reason: `The source map rates ${co.id} at ${value} for ${col}; ${co.id} is Bloom ${co.bloom} ${co.bloomName}.`,
+      };
+    }
+    map[co.id] = cells;
+  }
+
+  for (const co of spec.cos) {
+    const cells = map[co.id];
+    if (cells && Object.values(cells).some((cell) => cell && cell.value > 0)) continue;
+    map[co.id] = heuristic[co.id] ?? {};
+  }
+
+  for (const co of spec.cos) {
+    const cells = map[co.id] ?? {};
+    if (!Object.values(cells).some((cell) => cell && cell.value > 0)) {
+      cells["PO-1"] = {
+        value: 1,
+        reason: `${co.id} is a Bloom ${co.bloom} ${co.bloomName} outcome, so it contributes to engineering knowledge (PO-1) at a moderate level.`,
+      };
+      map[co.id] = cells;
+    }
+  }
+  return map;
 }
 
 export function generateDoc(
@@ -256,30 +425,37 @@ export function generateDoc(
   blueprintText: string,
   template: Template,
   fallbackInputId = DEFAULT_INPUT_ID,
+  tables: Table[] = [],
 ): SyllabusDoc {
-  const { spec, changes } = buildSpec(specText, blueprintText, template, fallbackInputId);
+  const { spec, changes, parseMeta, mapGrid } = buildSpec(specText, blueprintText, template, fallbackInputId, tables);
+  const caps: NonNullable<ParseMeta["bloomCaps"]> = [];
+  const map = buildDocMap(spec, mapGrid, changes, caps);
+  if (caps.length) parseMeta.bloomCaps = caps;
   return {
     status: "Draft",
     generated: true,
     spec,
-    map: buildMap(spec),
+    map,
     annexure: { ...DEFAULT_ANNEXURE },
     comments: [],
     changes,
     updatedAt: new Date().toISOString(),
+    parseMeta,
   };
 }
 
 export function runChecks(doc: SyllabusDoc): Check[] {
   const spec = doc.spec;
   if (!spec) return [];
-  const theory = spec.credits.L + spec.credits.T;
-  const unitHours = spec.units.reduce((sum, u) => sum + u.hours, 0);
-  const weightage = spec.assessment.reduce((sum, a) => sum + a.weightage, 0);
+  const lectures = spec.hours.lectures;
+  const unitHours = spec.units.reduce((sum, unit) => sum + unit.hours, 0);
+  const weightage = spec.assessment.reduce((sum, item) => sum + item.weightage, 0);
   const mapped = spec.cos.filter((co) => doc.map[co.id] !== undefined).length;
-  const sampleHit = [spec.summary, spec.resources, ...spec.cos.map((c) => c.text), ...spec.units.map((u) => u.content)]
-    .some((t) => SAMPLE_TEXT.test(t));
-  const summaryOk = !spec.units.length || spec.units.some((u) => keywordsOf(u.title).some((w) => spec.summary.toLowerCase().includes(w)));
+  const sampleHit = [spec.summary, spec.resources, ...spec.cos.map((co) => co.text), ...spec.units.map((unit) => unit.content)]
+    .some((text) => SAMPLE_TEXT.test(text));
+  const lowered = spec.summary.toLowerCase();
+  const summaryOk = spec.units.every((unit) => keywordsOf(unit.title).some((word) => lowered.includes(word)));
+  const templateOk = spec.template === detectTemplate(spec.credits, spec.courseType, spec.units);
 
   return [
     {
@@ -289,8 +465,8 @@ export function runChecks(doc: SyllabusDoc): Check[] {
     },
     {
       label: "Hours add up",
-      pass: unitHours === theory,
-      message: `Units total ${unitHours} hours; theory hours (L+T) are ${theory}`,
+      pass: unitHours === lectures,
+      message: `Units total ${unitHours} hours; the teaching plan has ${lectures} lecture hours, ${spec.hours.lab} lab and ${spec.hours.testsExams} test hours`,
     },
     {
       label: "Weightages total 100%",
@@ -305,7 +481,12 @@ export function runChecks(doc: SyllabusDoc): Check[] {
     {
       label: "Summary matches syllabus",
       pass: summaryOk,
-      message: summaryOk ? "Summary mentions the unit topics" : "Summary does not mention any unit topic",
+      message: summaryOk ? "Summary mentions every unit theme" : "Summary does not mention every unit theme",
+    },
+    {
+      label: "Template matches the credit structure",
+      pass: templateOk,
+      message: `L:T:P is ${spec.credits.L}:${spec.credits.T}:${spec.credits.P}, so the ${spec.template} template is used`,
     },
   ];
 }

@@ -58,6 +58,11 @@ export interface Credits {
   C: number;
 }
 
+export interface SkillRow {
+  skill: string;
+  method: string;
+}
+
 export interface Spec {
   inputId: string;
   title: string;
@@ -72,6 +77,22 @@ export interface Spec {
   assessment: AssessmentItem[];
   resources: string;
   hours: TeachingHours;
+  coCoverage?: Record<string, string[]>;
+  skills?: SkillRow[];
+}
+
+/** What the source document actually contained, kept for the V1-V10 checks. */
+export interface ParseMeta {
+  sectionCos: string[];
+  mapCos: string[];
+  assessedCos: string[];
+  mapColumns: string[];
+  declaredHours: number | null;
+  tableHours: number | null;
+  droppedSections: { section: number; title: string }[];
+  blueprintMarks: { maximum: number | null; total: number | null };
+  typos?: { wrong: string; right: string; section: number }[];
+  bloomCaps?: { co: string; col: string; from: number; to: number }[];
 }
 
 export interface MapCell {
@@ -95,6 +116,7 @@ export interface SyllabusDoc {
   comments: Comment[];
   changes: string[];
   updatedAt: string;
+  parseMeta?: ParseMeta;
 }
 
 export interface Check {

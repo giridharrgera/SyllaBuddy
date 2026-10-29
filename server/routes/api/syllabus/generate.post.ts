@@ -1,6 +1,6 @@
 import { defineEventHandler, setResponseStatus } from "h3";
 import { mapWarnings, generateDoc, runChecks } from "../../../lib/syllabus/engine";
-import { documentToText } from "../../../lib/syllabus/parse";
+import { documentToStructure } from "../../../lib/syllabus/parse";
 import { HttpError, requireRole, saveDoc } from "../../../lib/syllabus/store";
 
 export default defineEventHandler(async (event) => {
@@ -12,10 +12,10 @@ export default defineEventHandler(async (event) => {
     const template = form.get("template");
     if (template !== "integrated" && template !== "non-lab") throw new HttpError(400, "Choose a template.");
     const blueprint = form.get("blueprint");
-    const specText = await documentToText(spec);
+    const parsedSpec = await documentToStructure(spec);
     const blueprintText =
-      blueprint instanceof File && blueprint.size > 0 ? await documentToText(blueprint) : "";
-    const doc = saveDoc(generateDoc(specText, blueprintText, template));
+      blueprint instanceof File && blueprint.size > 0 ? (await documentToStructure(blueprint)).text : "";
+    const doc = saveDoc(generateDoc(parsedSpec.text, blueprintText, template, undefined, parsedSpec.tables));
     return { doc, checks: runChecks(doc), warnings: mapWarnings(doc) };
   } catch (err) {
     const status = err instanceof HttpError ? err.statusCode : 400;

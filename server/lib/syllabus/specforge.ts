@@ -7,7 +7,7 @@ import {
   type Spec,
   type SyllabusDoc,
 } from "../../../app/lib/syllabuddy-types";
-import { DEFAULT_INPUT_ID, IMPLEMENTATION_VERB, SAMPLE_TEXT } from "./engine";
+import { DEFAULT_INPUT_ID, IMPLEMENTATION_VERB, SAMPLE_TEXT, detectTemplate } from "./engine";
 import { SPECFORGE_OUTPUT_SCHEMA } from "./specforge-schema";
 
 export type SpecforgeTemplate = "integrated" | "non_lab";
@@ -110,12 +110,21 @@ function componentAssesses(name: string, co: CourseOutcome): boolean {
   return co.bloom >= 3 || IMPLEMENTATION_VERB.test(co.text);
 }
 
+const ASSESSED_PRACTICALLY = /lab|practical|project|assignment|seminar|presentation|viva|studio|workshop/i;
+const STRONG_PO = new Set(["PO-3", "PO-5"]);
+
 export function buildCoCoverage(cos: CourseOutcome[], spec: Spec): Record<string, string[]> {
+  const supplied = spec.coCoverage ?? {};
   const coverage: Record<string, string[]> = {};
   for (const co of cos) {
-    coverage[coId(co.id)] = spec.assessment
-      .filter((item) => item.component && componentAssesses(item.component, co))
-      .map((item) => item.component);
+    const id = coId(co.id);
+    const names =
+      supplied[id] ??
+      supplied[co.id] ??
+      spec.assessment
+        .filter((item) => item.component && componentAssesses(item.component, co))
+        .map((item) => item.component);
+    coverage[id] = names.filter((name) => spec.assessment.some((item) => item.component === name));
   }
   return coverage;
 }
@@ -158,118 +167,193 @@ function buildDefects(doc: SyllabusDoc, spec: Spec, cos: CourseOutcome[], covera
   const defects: SpecforgeDefect[] = [];
   const add = (
     code: DefectCode,
+    source: "spec" | "blueprint" | "template",
     description: string,
     fix: string,
     section?: number,
     refs?: string[],
   ) => {
-    const location: SpecforgeDefect["location"] = { source: "spec" };
+    const location: SpecforgeDefect["location"] = { source };
     if (section !== undefined) location.section = section;
     if (refs?.length) location.refs = refs;
     defects.push({ code, location, description, fix });
   };
+  const at = (code: DefectCode, description: string, fix: string, section?: number, refs?: string[]) =>
+    add(code, "spec", description, fix, section, refs);
 
-  const hasLab = spec.credits.P > 0 || spec.units.some((unit) => Boolean(unit.lab));
-  if (spec.template === "non-lab" && hasLab) {
-    add(
+  const detected = detectTemplate(spec.credits, spec.courseType, spec.units);
+  if (detected !== spec.template) {
+    at(
       "WRONG_TEMPLATE",
-      "The non-lab template was selected but the spec has lab or practical content.",
-      "Use the integrated template, or remove the lab component.",
-    );
-  }
-  if (spec.template === "integrated" && !hasLab) {
-    add(
-      "WRONG_TEMPLATE",
-      "The integrated template was selected but the spec has no lab or practical hours.",
-      "Choose the non-lab template, or add the lab hours.",
+      `The ${spec.template} template was used, but credits ${spec.credits.L}:${spec.credits.T}:${spec.credits.P} and course type "${spec.courseType}" call for ${detected}.`,
+      `Use the ${detected} template.`,
     );
   }
 
   if (SAMPLE_TEXT.test(spec.summary ?? "")) {
-    add("PLACEHOLDER_TEXT", "The course summary still contains sample or placeholder text.", "Replace it with a summary of this course.", SECTION.summary);
+    at("PLACEHOLDER_TEXT", "The course summary still contains sample or placeholder text.", "Replace it with a summary of this course.", SECTION.summary);
   }
   if (SAMPLE_TEXT.test(spec.resources ?? "")) {
-    add("PLACEHOLDER_TEXT", "The resources section still contains sample or placeholder text.", "List the actual textbooks and references.", SECTION.resources);
+    at("PLACEHOLDER_TEXT", "The resources section still contains sample or placeholder text.", "List the actual textbooks and references.", SECTION.resources);
   }
   for (const co of cos) {
     if (SAMPLE_TEXT.test(co.text)) {
-      add("PLACEHOLDER_TEXT", `${coId(co.id)} still contains placeholder text.`, "Write it as one measurable outcome.", SECTION.cos, [coId(co.id)]);
+      at("PLACEHOLDER_TEXT", `${coId(co.id)} still contains placeholder text.`, "Write it as one measurable outcome.", SECTION.cos, [coId(co.id)]);
     }
     if (/^CO\s*-?\s*\d+\s*[:\-–]/i.test(co.text)) {
-      add("LABEL_OR_TITLE_MISMATCH", `${coId(co.id)} repeats its label inside the statement.`, "Remove the CO id from the statement text.", SECTION.cos, [coId(co.id)]);
+      at("LABEL_OR_TITLE_MISMATCH", `${coId(co.id)} repeats its label inside the statement.`, "Remove the CO id from the statement text.", SECTION.cos, [coId(co.id)]);
     }
   }
   for (const unit of spec.units) {
     if (SAMPLE_TEXT.test(unit.content)) {
-      add("PLACEHOLDER_TEXT", `Unit ${unit.no} still contains placeholder text.`, "Write the real unit content.", SECTION.units, [`Unit-${unit.no}`]);
+      at("PLACEHOLDER_TEXT", `Unit ${unit.no} still contains placeholder text.`, "Write the real unit content.", SECTION.units, [`Unit-${unit.no}`]);
     }
     if (/^unit\s*\d+/i.test(unit.title)) {
-      add("LABEL_OR_TITLE_MISMATCH", `Unit ${unit.no} repeats the unit label in its title.`, "Remove the unit number from the title.", SECTION.units, [`Unit-${unit.no}`]);
+      at("LABEL_OR_TITLE_MISMATCH", `Unit ${unit.no} repeats the unit label in its title.`, "Remove the unit number from the title.", SECTION.units, [`Unit-${unit.no}`]);
     }
   }
 
   if (!spec.assessment.length) {
-    add("CO_ASSESSMENT_MISMATCH", "No assessment components were found, so no CO is assessed.", "Add the assessment scheme with its component weights.", SECTION.assessment);
-  }
-  for (const co of cos) {
-    if (!doc.map[co.id]) {
-      add("CO_MISSING_IN_TABLE", `${coId(co.id)} has no row in the CO-PO-PSO map.`, "Map it to at least one PO or PSO.", SECTION.map, [coId(co.id)]);
-    }
-    if (spec.assessment.length && !coverage[coId(co.id)]?.length) {
-      add("CO_ASSESSMENT_MISMATCH", `${coId(co.id)} is not assessed by any assessment component.`, "Add a component that assesses this outcome.", SECTION.assessment, [coId(co.id)]);
-    }
-  }
-  for (const id of Object.keys(doc.map)) {
-    if (!cos.some((co) => co.id === id)) {
-      add("CO_EXTRA_IN_TABLE", `The map has a row for ${coId(id)}, which is not in the CO list.`, "Delete the stale row or add the missing CO.", SECTION.map, [coId(id)]);
-    }
+    at("CO_ASSESSMENT_MISMATCH", "No assessment components were found, so no CO is assessed.", "Add the assessment scheme with its component weights.", SECTION.assessment);
   }
 
-  const theory = spec.credits.L + spec.credits.T;
-  const unitHours = spec.units.reduce((sum, unit) => sum + (Number(unit.hours) || 0), 0);
-  if (spec.units.length && theory > 0 && unitHours !== theory) {
-    add("HOURS_INCONSISTENT", `Units total ${unitHours} hours but L+T is ${theory}.`, "Adjust the unit hours so they add up to the lecture hours.", SECTION.units);
-  }
+  const meta = doc.parseMeta;
+  const defined = new Set(cos.map((co) => coId(co.id)));
+  const mapCos = new Set((meta?.mapCos ?? Object.keys(doc.map)).map(coId));
+  const assessedCos = new Set((meta?.assessedCos ?? []).map(coId));
 
-  const weightage = spec.assessment.reduce((sum, item) => sum + item.weightage, 0);
-  if (spec.assessment.length && weightage !== 100) {
-    add("WEIGHTAGE_INCONSISTENT", `Assessment components total ${weightage}%.`, "Make the component weights add up to 100%.", SECTION.assessment);
-  }
-
-  for (const co of cos) {
-    const cells = Object.entries(doc.map[co.id] ?? {}) as [MapColumn, MapCell][];
-    const mapped = cells.filter(([, cell]) => cell.value > 0);
-    if (!mapped.length) {
-      add("MAPPING_UNSUPPORTED", `${coId(co.id)} is not mapped to any PO or PSO.`, "Map it to the outcomes it supports.", SECTION.map, [coId(co.id)]);
+  if (meta) {
+    for (const id of meta.sectionCos.map(coId)) {
+      if (!mapCos.has(id)) {
+        at("CO_MISSING_IN_TABLE", `Section 3 defines ${id}, but Section 5 of the spec has no row for it.`, `Add a ${id} row mapped to at least one PO.`, SECTION.map, [id]);
+      }
+      if (meta.assessedCos.length && !assessedCos.has(id)) {
+        at("CO_ASSESSMENT_MISMATCH", `Section 3 defines ${id}, but no component of Section 7 assesses it.`, `Mark ${id} in at least one component.`, SECTION.assessment, [id]);
+      }
     }
-    for (const [col, cell] of mapped) {
-      if (col === "PO-3" && cell.value === 3 && co.bloom <= 2) {
-        add("MAPPING_BLOOM_MISMATCH", `${coId(co.id)} is mapped 3 to PO-3 but its Bloom level is ${co.bloom}.`, "Lower the PO-3 level or raise the CO's Bloom level.", SECTION.map, [coId(co.id), col]);
+    for (const id of mapCos) {
+      if (!defined.has(id)) {
+        at("CO_EXTRA_IN_TABLE", `Section 5 maps ${id}, but Section 3 does not define that outcome.`, `Delete the ${id} row or add the missing outcome.`, SECTION.map, [id]);
+      }
+    }
+    for (const id of assessedCos) {
+      if (!defined.has(id)) {
+        at("CO_EXTRA_IN_TABLE", `Section 7 assesses ${id}, but Section 3 does not define that outcome.`, `Remove ${id} from the assessment table or add the outcome.`, SECTION.assessment, [id]);
+      }
+    }
+
+    for (const col of meta.mapColumns) {
+      const name = col.toUpperCase();
+      if (/^PSO-\d+$/.test(name) && !(MAP_COLUMNS as readonly string[]).includes(name)) {
+        at("PSO_COLUMN_MISMATCH", `Section 5 maps ${name}, but the programme defines only PSO-1 and PSO-2.`, `Fold the ${name} values into a defined PSO column or drop the column.`, SECTION.map, [name]);
+      }
+    }
+
+    const stated = meta.tableHours ?? spec.hours.lectures + spec.hours.lab + spec.hours.testsExams;
+    if (meta.declaredHours && meta.declaredHours !== stated) {
+      at(
+        "HOURS_INCONSISTENT",
+        `Section 2 declares ${meta.declaredHours} total hours of interaction, but Section 6 adds up to ${stated} hours (${spec.hours.lectures} lectures + ${spec.hours.lab} practical + ${spec.hours.testsExams} tests).`,
+        `Use one total: ${stated} hours.`,
+        2,
+      );
+    }
+
+    for (const dropped of meta.droppedSections) {
+      at(
+        "SECTION_NOT_IN_TEMPLATE",
+        `Section ${dropped.section} "${dropped.title}" is outside the nine-section template, so it is not part of the corrected document.`,
+        "Move its content into an existing section or drop it.",
+        dropped.section,
+      );
+    }
+
+    const marks = meta.blueprintMarks;
+    if (marks.maximum && marks.total && marks.maximum !== marks.total) {
+      add(
+        "MARKS_INCONSISTENT",
+        "blueprint",
+        `The blueprint states ${marks.maximum} maximum marks, but its unit-wise rows add up to ${marks.total}.`,
+        `Set the maximum marks to ${marks.total}.`,
+      );
+    }
+
+    for (const typo of meta.typos ?? []) {
+      at("TYPO_OR_FORMAT", `"${typo.wrong}" should read "${typo.right}" in Section ${typo.section}.`, `Correct it to "${typo.right}".`, typo.section);
+    }
+
+    for (const cap of meta.bloomCaps ?? []) {
+      at(
+        "MAPPING_BLOOM_MISMATCH",
+        `${cap.co} is mapped ${cap.from} to ${cap.col}, but its Bloom level supports at most ${cap.to}.`,
+        `Lower the ${cap.col} mapping to ${cap.to} or raise the CO's Bloom level.`,
+        SECTION.map,
+        [cap.co, cap.col],
+      );
+    }
+  } else {
+    for (const co of cos) {
+      if (!doc.map[co.id]) {
+        at("CO_MISSING_IN_TABLE", `${coId(co.id)} has no row in the CO-PO-PSO map.`, "Map it to at least one PO or PSO.", SECTION.map, [coId(co.id)]);
+      }
+    }
+    for (const id of Object.keys(doc.map)) {
+      if (!cos.some((co) => co.id === id)) {
+        at("CO_EXTRA_IN_TABLE", `The map has a row for ${coId(id)}, which is not in the CO list.`, "Delete the stale row or add the missing CO.", SECTION.map, [coId(id)]);
+      }
+    }
+    const annexure = doc.annexure ?? {};
+    const psoColumns = new Set(Object.keys(annexure).filter((col) => col.startsWith("PSO-")));
+    const usedPso = new Set(cos.flatMap((co) => Object.keys(doc.map[co.id] ?? {}).filter((col) => col.startsWith("PSO-"))));
+    for (const col of usedPso) {
+      if (!psoColumns.has(col)) {
+        at("PSO_COLUMN_MISMATCH", `The map uses ${col} but Annexure A does not define it.`, `Define ${col} in Annexure A or remove it from the map.`, SECTION.map, [col]);
       }
     }
   }
 
-  const annexure = doc.annexure ?? {};
-  const psoColumns = new Set(Object.keys(annexure).filter((col) => col.startsWith("PSO-")));
-  const usedPso = new Set(cos.flatMap((co) => Object.keys(doc.map[co.id] ?? {}).filter((col) => col.startsWith("PSO-"))));
-  for (const col of usedPso) {
-    if (!psoColumns.has(col)) {
-      add("PSO_COLUMN_MISMATCH", `The map uses ${col} but Annexure A does not define it.`, `Define ${col} in Annexure A or remove it from the map.`, SECTION.map, [col]);
+  for (const co of cos) {
+    if (spec.assessment.length && !coverage[coId(co.id)]?.length) {
+      at("CO_ASSESSMENT_MISMATCH", `${coId(co.id)} is not assessed by any assessment component.`, "Add a component that assesses this outcome.", SECTION.assessment, [coId(co.id)]);
     }
+    const cells = Object.entries(doc.map[co.id] ?? {}) as [MapColumn, MapCell][];
+    if (!cells.some(([, cell]) => cell.value > 0)) {
+      at("MAPPING_UNSUPPORTED", `${coId(co.id)} is not mapped to any PO or PSO.`, "Map it to the outcomes it supports.", SECTION.map, [coId(co.id)]);
+    }
+    for (const [col, cell] of cells) {
+      if (!STRONG_PO.has(col) || cell.value < 2) continue;
+      const names = coverage[coId(co.id)] ?? [];
+      if (names.some((name) => ASSESSED_PRACTICALLY.test(name))) continue;
+      at(
+        "MAPPING_UNSUPPORTED",
+        `${coId(co.id)} is mapped ${cell.value} to ${col}, but it is assessed only through ${names.join(", ") || "no component"}, which is not practical or assignment work.`,
+        `Assess ${coId(co.id)} through a practical or assignment component, or lower the ${col} mapping.`,
+        SECTION.map,
+        [coId(co.id), col],
+      );
+    }
+  }
+
+  const unitHours = spec.units.reduce((sum, unit) => sum + (Number(unit.hours) || 0), 0);
+  if (spec.units.length && unitHours !== spec.hours.lectures) {
+    at("HOURS_INCONSISTENT", `Units total ${unitHours} hours but the teaching plan has ${spec.hours.lectures} lecture hours.`, "Adjust the unit hours so they add up to the lecture hours.", SECTION.units);
+  }
+
+  const weightage = spec.assessment.reduce((sum, item) => sum + item.weightage, 0);
+  if (spec.assessment.length && weightage !== 100) {
+    at("WEIGHTAGE_INCONSISTENT", `Assessment components total ${weightage}%.`, "Make the component weights add up to 100%.", SECTION.assessment);
   }
 
   const summary = (spec.summary ?? "").toLowerCase();
   const summaryMentionsUnits =
-    !spec.units.length || spec.units.some((unit) => sectionTitleKeywords(unit.title).some((word) => summary.includes(word)));
+    !spec.units.length || spec.units.every((unit) => sectionTitleKeywords(unit.title).some((word) => summary.includes(word)));
   if (!summaryMentionsUnits) {
-    add("SUMMARY_SYLLABUS_MISMATCH", "The course summary does not mention any unit topic.", "Rewrite the summary so it introduces the units below.", SECTION.summary);
+    at("SUMMARY_SYLLABUS_MISMATCH", "The course summary does not mention every unit topic.", "Rewrite the summary so it introduces each unit below.", SECTION.summary);
   }
 
   for (const change of doc.changes) {
-    if (change.startsWith("Typo fixed")) {
-      add("TYPO_OR_FORMAT", change, "Check the corrected wording in the spec.");
-    } else if (change.startsWith("Removed")) {
-      add("OTHER", change, "Confirm the removed sentences belonged to another course.");
+    if (change.startsWith("Removed")) {
+      at("OTHER", change, "Confirm the removed sentences belonged to another course.");
     }
   }
 
