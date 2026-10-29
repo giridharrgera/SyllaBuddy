@@ -7,8 +7,10 @@ import {
   type SyllabusDoc,
 } from "../../../app/lib/syllabuddy-types";
 import { DEFAULT_ANNEXURE } from "./engine";
+import { buildSpecforgeOutput } from "./specforge";
 
 const FILE = path.resolve(process.cwd(), "data/syllabuddy.json");
+const OUTPUT_FILE = path.resolve(process.cwd(), "outputs/specforge_output.json");
 
 export class HttpError extends Error {
   constructor(
@@ -39,12 +41,25 @@ export function loadDoc(): SyllabusDoc {
   return doc;
 }
 
+export function writeSpecforgeOutput(doc: SyllabusDoc): void {
+  const output = buildSpecforgeOutput(doc);
+  fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });
+  const tmp = `${OUTPUT_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(output, null, 2));
+  fs.renameSync(tmp, OUTPUT_FILE);
+}
+
 export function saveDoc(doc: SyllabusDoc): SyllabusDoc {
   doc.updatedAt = new Date().toISOString();
   fs.mkdirSync(path.dirname(FILE), { recursive: true });
   const tmp = `${FILE}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(doc, null, 2));
   fs.renameSync(tmp, FILE);
+  try {
+    writeSpecforgeOutput(doc);
+  } catch (err) {
+    console.warn(`[specforge] outputs/specforge_output.json not refreshed: ${err instanceof Error ? err.message : err}`);
+  }
   return doc;
 }
 

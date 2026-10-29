@@ -1,10 +1,4 @@
-import {
-  MAP_COLUMNS,
-  type Check,
-  type MapCell,
-  type MapColumn,
-  type SyllabusDoc,
-} from "../../../app/lib/syllabuddy-types";
+import { MAP_COLUMNS, type SyllabusDoc } from "../../../app/lib/syllabuddy-types";
 
 function esc(value: unknown): string {
   return String(value ?? "")
@@ -81,28 +75,3 @@ th{background:#f5f5f4}.matrix td,.matrix th{text-align:center;width:6%}
 </body></html>`;
 }
 
-export function buildJson(doc: SyllabusDoc, checks: Check[]) {
-  const spec = doc.spec;
-  if (!spec) throw new Error("Nothing to export yet.");
-  return {
-    templateType: spec.template,
-    courseCode: spec.code,
-    courseTitle: spec.title,
-    credits: spec.credits,
-    status: doc.status,
-    courseOutcomes: spec.cos.map((co) => ({ id: co.id, text: co.text, bloom: co.bloom, bloomLevel: co.bloomName })),
-    units: spec.units,
-    assessment: spec.assessment,
-    coPoPsoMatrix: spec.cos.map((co) => ({
-      co: co.id,
-      cells: Object.fromEntries(
-        MAP_COLUMNS.flatMap((col) => {
-          const cell = doc.map[co.id]?.[col] as MapCell | undefined;
-          return cell && cell.value > 0 ? [[col as MapColumn, cell]] : [];
-        }),
-      ),
-    })),
-    validation: checks,
-    defectsFixed: doc.changes,
-  };
-}

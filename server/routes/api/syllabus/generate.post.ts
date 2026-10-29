@@ -15,7 +15,8 @@ export default defineEventHandler(async (event) => {
     const specText = await documentToText(spec);
     const blueprintText =
       blueprint instanceof File && blueprint.size > 0 ? await documentToText(blueprint) : "";
-    const doc = saveDoc(generateDoc(specText, blueprintText, template));
+    const inputId = spec.name.replace(/\.[^.]+$/, "").trim();
+    const doc = saveDoc(generateDoc(specText, blueprintText, template, inputId));
     return { doc, checks: runChecks(doc), warnings: mapWarnings(doc) };
   } catch (err) {
     const status = err instanceof HttpError ? err.statusCode : 400;
