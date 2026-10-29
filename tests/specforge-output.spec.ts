@@ -90,6 +90,30 @@ describe("buildSpecforgeOutput", () => {
     expect(buildSpecforgeOutput(doc).input_id).toBe("SAMPLE");
   });
 
+  it("reports unsupported PO-6..PO-11 cells and a summary that ignores the units", () => {
+    const doc = sampleDoc();
+    doc.parseMeta = {
+      sectionCos: ["CO-1", "CO-2"],
+      mapCos: ["CO-1", "CO-2"],
+      assessedCos: ["CO-1", "CO-2"],
+      mapColumns: [...MAP_COLUMNS],
+      declaredHours: null,
+      tableHours: null,
+      droppedSections: [],
+      blueprintMarks: { maximum: null, total: null },
+      summaryCoversUnits: false,
+      unsupportedCells: [{ co: "CO-1", col: "PO-10", level: 1 }],
+    };
+
+    const output = buildSpecforgeOutput(doc);
+    const codes = output.defects.map((defect) => defect.code);
+
+    expect(codes).toContain("SUMMARY_SYLLABUS_MISMATCH");
+    expect(
+      output.defects.some((defect) => defect.code === "MAPPING_UNSUPPORTED" && defect.location.refs?.includes("PO-10")),
+    ).toBe(true);
+  });
+
   it("refuses to emit a document with no course outcomes", () => {
     const doc = sampleDoc();
     doc.spec!.cos = [];

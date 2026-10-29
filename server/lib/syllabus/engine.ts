@@ -52,12 +52,12 @@ const PO_KEYWORDS: Record<MapColumn, RegExp> = {
   "PO-3": /design|develop|construct|create|propos|synthes/i,
   "PO-4": /investigat|experiment|data|research|measur/i,
   "PO-5": /tool|software|simulat|implement|program|coding|lab\b/i,
-  "PO-6": /societ|legal|safety|health|public/i,
-  "PO-7": /environment|sustainab/i,
-  "PO-8": /ethic|professional|integrity/i,
-  "PO-9": /team|individual|group|collaborat/i,
-  "PO-10": /communicat|present|report|writ|document|discuss/i,
-  "PO-11": /project|financ|manag|schedul|cost/i,
+  "PO-6": /societ|environment|sustainab|legal|safety|health|public/i,
+  "PO-7": /ethic|professional|integrity|law/i,
+  "PO-8": /team|individual|group|collaborat/i,
+  "PO-9": /communicat|present|report|writ|document|discuss/i,
+  "PO-10": /project|financ|manag|schedul|cost/i,
+  "PO-11": /lifelong|life-long|independent|adaptab|emerging/i,
   "PSO-1": /algorithm|system|application|solv|solution|comput|core/i,
   "PSO-2": /implement|develop|software|tool|practic|lab\b|deploy|hands-on/i,
 };
@@ -73,6 +73,11 @@ const TYPOS: Record<string, string> = {
   wich: "which", untill: "until", hopcropt: "Hopcroft", ulman: "Ullman",
   "o'rielly": "O'Reilly", "o’rielly": "O’Reilly",
 };
+
+/** Broken references the word dictionary cannot catch: a domain split across a space or a dropped letter. */
+const BROKEN_REFERENCES: { re: RegExp; right: string }[] = [
+  { re: /quantamagazine\.r\s*g/gi, right: "quantamagazine.org" },
+];
 
 export const DEFAULT_ANNEXURE: Record<MapColumn, string> = Object.fromEntries(
   MAP_COLUMNS.map((col) => [col, `${col}: ${MAP_STATEMENTS[col]}`]),
@@ -122,12 +127,21 @@ export function detectTemplate(credits: Credits, courseType: string, units: Unit
   return "non-lab";
 }
 
+/** PO-6..PO-11 need evidence from the syllabus or assessment, so a CO statement alone cannot fill them. */
+const EVIDENCE_COLUMNS = new Set<MapColumn>(["PO-6", "PO-7", "PO-8", "PO-9", "PO-10", "PO-11"]);
+
 export function buildMap(spec: Spec): SyllabusDoc["map"] {
   const map: SyllabusDoc["map"] = {};
   for (const co of spec.cos) {
     const row: Partial<Record<MapColumn, MapCell>> = {};
     const verb = detectBloom(co.text).verb;
+    const knowledge = (co.bloom >= 3 ? 2 : 1) as MapCell["value"];
+    row["PO-1"] = {
+      value: knowledge,
+      reason: `Bloom ${co.bloom} ${co.bloomName} shows the outcome builds on engineering knowledge (PO-1) at level ${knowledge}.`,
+    };
     for (const col of MAP_COLUMNS) {
+      if (col === "PO-1" || EVIDENCE_COLUMNS.has(col)) continue;
       if (!allowedColumn(col, co, spec)) continue;
       const keyword = co.text.match(PO_KEYWORDS[col]);
       if (!keyword) continue;
@@ -165,6 +179,14 @@ function fixTypos(text: string, changes: string[], hits: TypoHit[], section: num
     const found = out.match(re)?.[0];
     if (found) {
       changes.push(`Typo fixed in section ${section}: "${found}" to "${right}"`);
+      hits.push({ wrong: found, right, section });
+      out = out.replace(re, right);
+    }
+  }
+  for (const { re, right } of BROKEN_REFERENCES) {
+    const found = out.match(re)?.[0];
+    if (found) {
+      changes.push(`Broken reference fixed in section ${section}: "${found}" to "${right}"`);
       hits.push({ wrong: found, right, section });
       out = out.replace(re, right);
     }
@@ -213,14 +235,30 @@ function normalizeCoverage(grid: ReturnType<typeof extractAssessmentTable>): Spe
   return coverage;
 }
 
-function summaryWithUnits(summary: string, units: Unit[]): { text: string; added: boolean } {
+/** How many words of a unit's content the summary borrows to name its themes. */
+const THEME_WORDS = 30;
+
+function unitTheme(unit: Unit): string {
+  const words = unit.content.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  let theme = words.slice(0, THEME_WORDS).join(" ").replace(/[,;:.\s]+$/, "");
+  const dangling = /(?:\s+\b(?:and|or|the|of|for|in|to|with|between|using|from|on|by|as|their|its|a|an)\b|\s*\([^)]*)$/i;
+  while (dangling.test(theme)) theme = theme.replace(dangling, "").replace(/[,;:.\s]+$/, "");
+  return theme;
+}
+
+function summaryWithUnits(summary: string, units: Unit[]): { text: string; added: boolean; covered: boolean } {
   const titles = units.map((unit) => unit.title).filter(Boolean);
-  if (!titles.length) return { text: summary, added: false };
+  if (!titles.length) return { text: summary, added: false, covered: true };
   const lowered = summary.toLowerCase();
   const missing = titles.filter((title) => !keywordsOf(title).some((word) => lowered.includes(word)));
-  if (!missing.length) return { text: summary, added: false };
-  const sentence = `The course is organised into ${titles.length} units: ${titles.join(", ")}.`;
-  return { text: summary ? `${summary} ${sentence}` : sentence, added: true };
+  const covered = !missing.length;
+  if (covered) return { text: summary, added: false, covered };
+  const parts = units.map((unit) => {
+    const theme = unitTheme(unit);
+    return theme ? `${unit.title} (${theme})` : unit.title;
+  });
+  const sentence = `The course is organised into ${units.length} units: ${parts.join("; ")}.`;
+  return { text: summary ? `${summary} ${sentence}` : sentence, added: true, covered };
 }
 
 function keywordsOf(text: string): string[] {
@@ -311,7 +349,6 @@ export function buildSpec(
   const summaryUnits = summaryWithUnits(summary, units);
   summary = summaryUnits.text;
   if (summaryUnits.added) changes.push("Summary extended so it mentions every unit");
-
   const assessment = assessmentGrid?.components ?? extractAssessment(specLines);
   const totalWeightage = assessment.reduce((sum, item) => sum + item.weightage, 0);
   if (assessment.length && totalWeightage > 0 && totalWeightage !== 100) {
@@ -364,6 +401,7 @@ export function buildSpec(
     tableHours: teachingGrid?.total ?? null,
     droppedSections: findDroppedSections(specLines),
     blueprintMarks: extractBlueprintMarks(blueprintText),
+    summaryCoversUnits: summaryUnits.covered,
     ...(typos.length ? { typos } : {}),
   };
 
@@ -375,6 +413,7 @@ function buildDocMap(
   grid: MapGrid | null,
   changes: string[],
   caps: NonNullable<ParseMeta["bloomCaps"]>,
+  unsupported: NonNullable<ParseMeta["unsupportedCells"]>,
 ): SyllabusDoc["map"] {
   const heuristic = buildMap(spec);
   const map: SyllabusDoc["map"] = {};
@@ -387,6 +426,10 @@ function buildDocMap(
     for (const col of MAP_COLUMNS) {
       const value = row.values[col];
       if (!value) continue;
+      if (EVIDENCE_COLUMNS.has(col)) {
+        unsupported.push({ co: co.id, col, level: value });
+        continue;
+      }
       const ceiling = bloomCeiling(co.bloom);
       const level = Math.min(value, ceiling) as MapCell["value"];
       if (level !== value) {
@@ -429,8 +472,10 @@ export function generateDoc(
 ): SyllabusDoc {
   const { spec, changes, parseMeta, mapGrid } = buildSpec(specText, blueprintText, template, fallbackInputId, tables);
   const caps: NonNullable<ParseMeta["bloomCaps"]> = [];
-  const map = buildDocMap(spec, mapGrid, changes, caps);
+  const unsupported: NonNullable<ParseMeta["unsupportedCells"]> = [];
+  const map = buildDocMap(spec, mapGrid, changes, caps, unsupported);
   if (caps.length) parseMeta.bloomCaps = caps;
+  if (unsupported.length) parseMeta.unsupportedCells = unsupported;
   return {
     status: "Draft",
     generated: true,

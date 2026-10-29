@@ -291,6 +291,25 @@ function buildDefects(doc: SyllabusDoc, spec: Spec, cos: CourseOutcome[], covera
         [cap.co, cap.col],
       );
     }
+
+    for (const cell of meta.unsupportedCells ?? []) {
+      at(
+        "MAPPING_UNSUPPORTED",
+        `${cell.co} is mapped ${cell.level} to ${cell.col}, but neither the syllabus nor the assessment gives evidence for ${cell.col}.`,
+        `Clear the ${cell.col} cell for ${cell.co} or add the evidence it needs.`,
+        SECTION.map,
+        [cell.co, cell.col],
+      );
+    }
+
+    if (meta.summaryCoversUnits === false) {
+      at(
+        "SUMMARY_SYLLABUS_MISMATCH",
+        "The course summary in the input does not mention the units the blueprint defines.",
+        "Rewrite the summary so it introduces each unit below.",
+        SECTION.summary,
+      );
+    }
   } else {
     for (const co of cos) {
       if (!doc.map[co.id]) {
@@ -347,7 +366,7 @@ function buildDefects(doc: SyllabusDoc, spec: Spec, cos: CourseOutcome[], covera
   const summary = (spec.summary ?? "").toLowerCase();
   const summaryMentionsUnits =
     !spec.units.length || spec.units.every((unit) => sectionTitleKeywords(unit.title).some((word) => summary.includes(word)));
-  if (!summaryMentionsUnits) {
+  if (!meta && !summaryMentionsUnits) {
     at("SUMMARY_SYLLABUS_MISMATCH", "The course summary does not mention every unit topic.", "Rewrite the summary so it introduces each unit below.", SECTION.summary);
   }
 

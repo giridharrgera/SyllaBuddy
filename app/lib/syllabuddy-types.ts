@@ -93,6 +93,10 @@ export interface ParseMeta {
   blueprintMarks: { maximum: number | null; total: number | null };
   typos?: { wrong: string; right: string; section: number }[];
   bloomCaps?: { co: string; col: string; from: number; to: number }[];
+  /** The input summary before it was extended, tested against the unit themes. */
+  summaryCoversUnits?: boolean;
+  /** Source cells on PO-6..PO-11, which need explicit evidence a course text rarely gives. */
+  unsupportedCells?: { co: string; col: string; level: number }[];
 }
 
 export interface MapCell {
