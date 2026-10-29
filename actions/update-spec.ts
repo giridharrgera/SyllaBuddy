@@ -8,14 +8,25 @@ export default defineAction({
   schema: z.object({
     role: z.enum(["author", "reviewer", "hod"]),
     patch: z.object({
+      inputId: z.string().optional(),
       title: z.string().optional(),
       code: z.string().optional(),
+      department: z.string().optional(),
+      courseType: z.string().optional(),
       credits: z.object({ L: z.number(), T: z.number(), P: z.number(), C: z.number() }).optional(),
       summary: z.string().optional(),
       resources: z.string().optional(),
       cos: z.array(z.object({ id: z.string(), text: z.string() })).optional(),
       units: z
-        .array(z.object({ no: z.string(), title: z.string(), hours: z.number(), content: z.string() }))
+        .array(
+          z.object({
+            no: z.string(),
+            title: z.string(),
+            hours: z.number(),
+            content: z.string(),
+            lab: z.string().nullable().optional(),
+          }),
+        )
         .optional(),
       assessment: z.array(z.object({ component: z.string(), weightage: z.number() })).optional(),
     }),
@@ -27,15 +38,18 @@ export default defineAction({
     if (!doc.spec) throw new Error("Upload a spec before editing.");
     const spec = doc.spec;
 
+    if (patch.inputId !== undefined) spec.inputId = patch.inputId;
     if (patch.title !== undefined) spec.title = patch.title;
     if (patch.code !== undefined) spec.code = patch.code;
+    if (patch.department !== undefined) spec.department = patch.department;
+    if (patch.courseType !== undefined) spec.courseType = patch.courseType;
     if (patch.credits) {
       spec.credits = patch.credits;
       spec.template = patch.credits.P > 0 ? "integrated" : "non-lab";
     }
     if (patch.summary !== undefined) spec.summary = patch.summary;
     if (patch.resources !== undefined) spec.resources = patch.resources;
-    if (patch.units) spec.units = patch.units;
+    if (patch.units) spec.units = patch.units.map((unit) => ({ ...unit, lab: unit.lab ?? null }));
     if (patch.assessment) spec.assessment = patch.assessment;
     if (patch.cos) {
       spec.cos = withBloom(patch.cos.map((co) => ({ ...co, bloom: 0, bloomName: "" })));

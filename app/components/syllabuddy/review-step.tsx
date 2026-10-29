@@ -126,8 +126,11 @@ export function ReviewStep({
       {
         role,
         patch: {
+          inputId: draft.inputId,
           title: draft.title,
           code: draft.code,
+          department: draft.department,
+          courseType: draft.courseType,
           credits: draft.credits,
           summary: draft.summary,
           resources: draft.resources,
@@ -182,6 +185,34 @@ export function ReviewStep({
             </Field>
             <Field label="Course code">
               <input className={inputClass} disabled={readOnly} value={draft.code} onChange={(e) => set("code", e.target.value)} />
+            </Field>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Input ID">
+              <input
+                className={inputClass}
+                disabled={readOnly}
+                placeholder="e.g. H1"
+                value={draft.inputId ?? ""}
+                onChange={(e) => set("inputId", e.target.value)}
+              />
+            </Field>
+            <Field label="Department">
+              <input
+                className={inputClass}
+                disabled={readOnly}
+                value={draft.department ?? ""}
+                onChange={(e) => set("department", e.target.value)}
+              />
+            </Field>
+            <Field label="Course type">
+              <input
+                className={inputClass}
+                disabled={readOnly}
+                placeholder="e.g. Professional Core"
+                value={draft.courseType ?? ""}
+                onChange={(e) => set("courseType", e.target.value)}
+              />
             </Field>
           </div>
           <div className="grid grid-cols-4 gap-3">
