@@ -277,8 +277,16 @@ function buildDefects(doc: SyllabusDoc, spec: Spec, cos: CourseOutcome[], covera
       );
     }
 
-    for (const typo of meta.typos ?? []) {
-      at("TYPO_OR_FORMAT", `"${typo.wrong}" should read "${typo.right}" in Section ${typo.section}.`, `Correct it to "${typo.right}".`, typo.section, [typo.wrong]);
+    const typos = meta.typos ?? [];
+    if (typos.length) {
+      const listed = typos.map((typo) => `"${typo.wrong}" to "${typo.right}"`).join("; ");
+      at(
+        "TYPO_OR_FORMAT",
+        `Section 9 has ${typos.length} typo or broken reference${typos.length === 1 ? "" : "s"}: ${listed}.`,
+        "Correct every listed spelling and reference.",
+        9,
+        typos.map((typo) => typo.wrong),
+      );
     }
 
     for (const cap of meta.bloomCaps ?? []) {
@@ -311,12 +319,24 @@ function buildDefects(doc: SyllabusDoc, spec: Spec, cos: CourseOutcome[], covera
     }
 
     for (const label of meta.labelMismatches ?? []) {
+      const heading = label.section === 8;
       at(
-        "LABEL_OR_TITLE_MISMATCH",
+        heading ? "TYPO_OR_FORMAT" : "LABEL_OR_TITLE_MISMATCH",
         `Section ${label.section} says "${label.found}", but the template heading or unit title is "${label.expected}".`,
         `Rename it to "${label.expected}".`,
         label.section,
         label.refs,
+      );
+    }
+
+    if (meta.practicalSkills) {
+      const row = meta.practicalSkills;
+      at(
+        "OTHER",
+        `Section 8 imparts Practical Skills through "${row.method}", but this is a laboratory course, so the laboratory must be named.`,
+        "Name the laboratory in the Practical Skills row.",
+        8,
+        [row.skill],
       );
     }
 

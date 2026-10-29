@@ -101,6 +101,8 @@ export interface ParseMeta {
   practicalUnsupported?: { co: string; col: string; from: number; to: number; names: string[] }[];
   /** Headings and unit labels in the input that disagree with the official template. */
   labelMismatches?: { section: number; refs: string[]; found: string; expected: string }[];
+  /** Laboratory course whose section 8 Practical Skills row names no laboratory. */
+  practicalSkills?: { skill: string; method: string };
 }
 
 export interface MapCell {

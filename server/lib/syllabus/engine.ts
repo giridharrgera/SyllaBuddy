@@ -388,6 +388,16 @@ export function buildSpec(
   }
 
   const skills = extractSkills(tables);
+  let practicalSkillsFix: { skill: string; method: string } | null = null;
+  if (chosenTemplate === "integrated") {
+    for (const row of skills) {
+      if (!/^practical\s+skills?$/i.test(row.skill.trim())) continue;
+      if (/lab|laborator|practical|workshop|studio/i.test(row.method)) continue;
+      practicalSkillsFix = { skill: row.skill, method: row.method.trim() };
+      row.method = row.method.trim() && row.method.trim() !== "--" ? `${row.method.trim()}, Laboratory` : "Laboratory";
+      changes.push(`Practical Skills now names the laboratory in section 8`);
+    }
+  }
 
   const detectedTemplate = detectTemplate(credits, courseType, units);
   if (detectedTemplate !== chosenTemplate) {
@@ -472,6 +482,7 @@ export function buildSpec(
     blueprintMarks: extractBlueprintMarks(blueprintText),
     summaryCoversUnits: summaryUnits.covered,
     ...(typos.length ? { typos } : {}),
+    ...(practicalSkillsFix ? { practicalSkills: practicalSkillsFix } : {}),
   };
   if (labels.length) parseMeta.labelMismatches = labels;
 
