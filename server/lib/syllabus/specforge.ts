@@ -319,8 +319,9 @@ function buildDefects(doc: SyllabusDoc, spec: Spec, cos: CourseOutcome[], covera
     }
 
     for (const label of meta.labelMismatches ?? []) {
+      const heading = label.section === 8;
       at(
-        "LABEL_OR_TITLE_MISMATCH",
+        heading ? "TYPO_OR_FORMAT" : "LABEL_OR_TITLE_MISMATCH",
         `Section ${label.section} says "${label.found}", but the template heading or unit title is "${label.expected}".`,
         `Rename it to "${label.expected}".`,
         label.section,
