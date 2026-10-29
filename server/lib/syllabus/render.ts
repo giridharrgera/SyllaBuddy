@@ -64,18 +64,18 @@ th{background:#f5f5f4}.matrix td,.matrix th{text-align:center;width:6%}
 <tr><th>Course code</th><td>${esc(spec.code)}</td><th>Course title</th><td>${esc(spec.title)}</td></tr>
 <tr><th>L : T : P</th><td>${L} : ${T} : ${P}</td><th>Credits</th><td>${C}</td></tr>
 </table>
-<h2>Course summary</h2><p>${esc(spec.summary)}</p>
-<h2>Course outcomes</h2>
+<h2>1. Course Summary</h2><p>${esc(spec.summary)}</p>
+<h2>3. Course Outcomes (COs)</h2>
 <table><tr><th>CO</th><th>Outcome</th><th>Bloom level</th></tr>${coRows}</table>
-<h2>Unit-wise syllabus</h2>
+<h2>4. Course Contents</h2>
 <table><tr><th>Unit</th><th>Title</th><th>Content</th><th>Hours</th></tr>${unitRows}
 <tr><td colspan="3"><b>Total</b></td><td><b>${unitHours}</b></td></tr></table>
-<h2>Assessment</h2>
+<h2>5. Course Map (CO-PO-PSO Map)</h2>
+<table class="matrix"><tr><th>CO</th>${matrixHead}</tr>${matrixRows}</table>
+<h2>7. Course Assessment and Reassessment</h2>
 <table><tr><th>Component</th><th>Weightage</th></tr>${assessmentRows}
 <tr><td><b>Total</b></td><td><b>${weightage}%</b></td></tr></table>
-<h2>Resources</h2><p style="white-space:pre-line">${esc(spec.resources)}</p>
-<h2>CO-PO-PSO map</h2>
-<table class="matrix"><tr><th>CO</th>${matrixHead}</tr>${matrixRows}</table>
+<h2>9. Course Resources</h2><p style="white-space:pre-line">${esc(spec.resources)}</p>
 <h2>Annexure A</h2><ul>${annexure}</ul>
 <h2>Changes made</h2><ul>${changes || "<li>None</li>"}</ul>
 </body></html>`;
